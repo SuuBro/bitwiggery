@@ -10,6 +10,8 @@ import com.bitwig.extension.controller.api.*;
 import com.bitwig.extension.controller.ControllerExtension;
 import com.suubro.handler.*;
 
+import java.time.Instant;
+import java.util.Date;
 import java.util.function.BooleanSupplier;
 
 public class D400GridExtension extends ControllerExtension
@@ -19,6 +21,8 @@ public class D400GridExtension extends ControllerExtension
    private MidiOut _midiOut;
    private HardwareSurface _hardwareSurface;
    private ModeHandler _mode;
+   private final long[] _vuMeterLastSend = new long[8];
+   private final long[] _faderLastSend = new long[8];
 
    protected D400GridExtension(final D400GridExtensionDefinition definition, final ControllerHost host)
    {
@@ -54,7 +58,7 @@ public class D400GridExtension extends ControllerExtension
               "(status == 144 && data1 == " + D400Hardware.JOG_WHEEL + " && data2 < 65)", 0.25);
       final RelativeHardwareValueMatcher relativeMatcher = _host.createOrRelativeHardwareValueMatcher(stepDownMatcher, stepUpMatcher);
       jogWheel.setAdjustValueMatcher(relativeMatcher);
-      transport.getPosition().addBinding(jogWheel);
+      transport.playStartPosition().addBinding(jogWheel);
 
       final CursorTrack cursorTrack = _host.createCursorTrack("D400_CURSOR_TRACK", "Cursor Track", 0, 0, true);
       final TrackBank trackBank = _host.createMainTrackBank (8, 0, 0);
@@ -63,74 +67,59 @@ public class D400GridExtension extends ControllerExtension
       for (int i = 0; i < trackBank.getSizeOfBank (); i++)
       {
          final int channel = i;
-         final HardwareSlider fader = _hardwareSurface.createHardwareSlider ("SLIDER_" + channel);
-         fader.setAdjustValueMatcher(_midiIn.createAbsolutePitchBendValueMatcher(channel));
-         fader.setBinding(trackBank.getItemAt(channel).volume());
-         fader.beginTouchAction().setActionMatcher(
-                 _midiIn.createActionMatcher("status == 0x90 && data1 == " + (0x68 + channel) + " && data2 > 0"));
-         fader.endTouchAction().setActionMatcher(
-                 _midiIn.createActionMatcher("status == 0x90 && data1 == " + (0x68 + channel) + " && data2 == 0"));
-         fader.disableTakeOver();
+         setUpFader(trackBank, channel);
 
-         fader.isBeingTouched().markInterested();
-         fader.targetValue().markInterested();
-         fader.isUpdatingTargetValue().markInterested();
-         fader.hasTargetValue().markInterested();
-
-         final DoubleValueChangedCallback moveFader = new DoubleValueChangedCallback()
-         {
-            @Override
-            public void valueChanged(final double value)
-            {
-               if (!fader.isUpdatingTargetValue().get())
-               {
-                  final int faderValue = Math.max(0, Math.min(16383, (int)(value * 16384.0)));
-
-                  if (mLastSentValue != value)
-                  {
-                     _midiOut.sendMidi(0xE0 | channel, faderValue & 0x7f, faderValue >> 7);
-                     mLastSentValue = faderValue;
-                  }
-               }
-            }
-
-            private int mLastSentValue = -1;
-         };
-
+         _vuMeterLastSend[channel] = Instant.now().toEpochMilli();
          final Track track = trackBank.getItemAt(i);
          track.addVuMeterObserver(14, -1, true, level -> {
-            _midiOut.sendMidi(Midi.CHANNEL_PRESSURE, level + (channel << 4), 0);
+            long now = Instant.now().toEpochMilli();
+            if (_vuMeterLastSend[channel] < now - 250)
+            {
+               _midiOut.sendMidi(Midi.CHANNEL_PRESSURE, level + (channel << 4), 0);
+               _vuMeterLastSend[channel] = now;
+            }
          } );
-
-
-
       }
-
-
-
-      // _transport = new TransportHandler(_host.createTransport(), hardware);
-
-
-      // final TrackHandler trackHandler = new TrackHandler(_host, _host.createMainTrackBank (8, 0, 0), cursorTrack, hardware);
-//
-      // final PinnableCursorDevice cursorDevice = cursorTrack.createCursorDevice("D400_CURSOR_DEVICE", "Cursor Device", 0, CursorDeviceFollowMode.FOLLOW_SELECTION);
-      // final RemoteControlHandler remoteControlHandler = new RemoteControlHandler(cursorDevice, cursorDevice.createCursorRemoteControlsPage (8));
-//
-      // final Mode [] modes = new Mode[]
-      // {
-      //     trackHandler,
-      //     remoteControlHandler
-      // };
-      // _mode = new ModeHandler(modes, _host);
 
       _host.showPopupNotification("D400Grid Initialized");
    }
 
-   private void render (final GraphicsOutput gc)
+   private void setUpFader(TrackBank trackBank, int channel)
    {
-      gc.setColor (Color.whiteColor());
-      gc.circle (100, 100, 50);
-      gc.fill ();
+      final HardwareSlider fader = _hardwareSurface.createHardwareSlider ("SLIDER_" + channel);
+      fader.setAdjustValueMatcher(_midiIn.createAbsolutePitchBendValueMatcher(channel));
+      fader.setBinding(trackBank.getItemAt(channel).volume());
+      fader.beginTouchAction().setActionMatcher(
+              _midiIn.createActionMatcher("status == 0x90 && data1 == " + (0x68 + channel) + " && data2 > 0"));
+      fader.endTouchAction().setActionMatcher(
+              _midiIn.createActionMatcher("status == 0x90 && data1 == " + (0x68 + channel) + " && data2 == 0"));
+      fader.disableTakeOver();
+
+      fader.isBeingTouched().markInterested();
+      fader.targetValue().markInterested();
+      fader.isUpdatingTargetValue().markInterested();
+      fader.hasTargetValue().markInterested();
+
+      final DoubleValueChangedCallback moveFader = new DoubleValueChangedCallback()
+      {
+         @Override
+         public void valueChanged(final double value)
+         {
+            if (!fader.isUpdatingTargetValue().get())
+            {
+               final int faderValue = Math.max(0, Math.min(16383, (int)(value * 16384.0)));
+
+               if (_lastSentValue != value)
+               {
+                  _midiOut.sendMidi(0xE0 | channel, faderValue & 0x7f, faderValue >> 7);
+                  _lastSentValue = faderValue;
+               }
+            }
+         }
+
+         private int _lastSentValue = -1;
+      };
+      fader.targetValue().addValueObserver(moveFader);
    }
 
    public void createButtonWithLight(final String name, final int midi, HardwareBindable binding,
