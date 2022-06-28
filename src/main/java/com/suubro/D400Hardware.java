@@ -1,13 +1,13 @@
 package com.suubro;
 
-import com.bitwig.extension.callback.ShortMidiDataReceivedCallback;
-import com.bitwig.extension.controller.api.MidiIn;
-import com.bitwig.extension.controller.api.MidiOut;
+import com.bitwig.extension.controller.api.*;
 
 import java.util.Arrays;
 
 public class D400Hardware
 {
+    public static final int CHANNEL         = 0;
+
     public static final int JOG_WHEEL       = 118;
     public static final int SHUTTLE         = 119;
 
@@ -97,13 +97,18 @@ public class D400Hardware
     private final MidiOut         portOut;
     private final int []          ledCache             = new int [128];
 
-    public D400Hardware(final MidiOut outputPort, final MidiIn inputPort, final ShortMidiDataReceivedCallback inputCallback)
+    public D400Hardware(ControllerHost host, final MidiIn inputPort, final MidiOut outputPort, final Transport transport)
     {
         this.portOut = outputPort;
+        final HardwareSurface hardwareSurface = host.createHardwareSurface ();
+        final HardwareButton playButton = hardwareSurface.createHardwareButton ("PLAY_BUTTON");
+
+        playButton.pressedAction().setActionMatcher(inputPort.createNoteOnActionMatcher(CHANNEL, BTN_PLAY));
+        playButton.pressedAction().setBinding (transport.playAction ());
 
         Arrays.fill (this.ledCache, -1);
 
-        inputPort.setMidiCallback (inputCallback);
+
     }
 
     public void updateLED (final int note, final boolean isOn)
