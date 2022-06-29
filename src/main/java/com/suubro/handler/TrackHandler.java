@@ -5,16 +5,16 @@ import com.bitwig.extension.controller.api.ControllerHost;
 import com.bitwig.extension.controller.api.CursorTrack;
 import com.bitwig.extension.controller.api.Track;
 import com.bitwig.extension.controller.api.TrackBank;
-import com.suubro.D400Hardware;
+import com.suubro.D400;
 
 public class TrackHandler implements Mode
 {
     private final TrackBank _trackBank;
     private final CursorTrack _cursorTrack;
     private final ControllerHost _host;
-    private final D400Hardware _hardware;
+    private final D400 _hardware;
 
-    public TrackHandler (final ControllerHost host, final TrackBank trackbank, final CursorTrack cursorTrack, D400Hardware hardware)
+    public TrackHandler (final ControllerHost host, final TrackBank trackbank, final CursorTrack cursorTrack, D400 hardware)
     {
         _host = host;
         _trackBank = trackbank;

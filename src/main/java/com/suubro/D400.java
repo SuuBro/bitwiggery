@@ -4,7 +4,7 @@ import com.bitwig.extension.controller.api.*;
 
 import java.util.Arrays;
 
-public class D400Hardware
+public class D400
 {
     public static final int CHANNEL         = 0;
 
@@ -97,7 +97,7 @@ public class D400Hardware
     private final MidiOut         portOut;
     private final int []          ledCache             = new int [128];
 
-    public D400Hardware(ControllerHost host, final MidiIn inputPort, final MidiOut outputPort, final Transport transport)
+    public D400(ControllerHost host, final MidiIn inputPort, final MidiOut outputPort, final Transport transport)
     {
         this.portOut = outputPort;
         final HardwareSurface hardwareSurface = host.createHardwareSurface ();

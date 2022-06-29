@@ -2,7 +2,7 @@ package com.suubro.handler;
 
 import com.bitwig.extension.api.util.midi.ShortMidiMessage;
 import com.bitwig.extension.controller.api.ControllerHost;
-import com.suubro.D400Hardware;
+import com.suubro.D400;
 
 public class ModeHandler
 {
@@ -45,11 +45,11 @@ public class ModeHandler
         {
             switch (message.getData1 ())
             {
-                case D400Hardware.BTN_ASSIGN1:
+                case D400.BTN_ASSIGN1:
                     this.setActiveMode (this.modes[0]);
                     return true;
 
-                case D400Hardware.BTN_ASSIGN2:
+                case D400.BTN_ASSIGN2:
                     this.setActiveMode (this.modes[1]);
                     return true;
             }
