@@ -1,7 +1,6 @@
 package com.suubro;
 
 import com.bitwig.extension.api.util.midi.ShortMidiMessage;
-import com.bitwig.extension.callback.DoubleValueChangedCallback;
 import com.bitwig.extension.controller.api.*;
 import com.bitwig.extension.controller.ControllerExtension;
 
@@ -10,6 +9,8 @@ import java.util.function.BooleanSupplier;
 
 public class D400GridExtension extends ControllerExtension
 {
+   private static final int NUM_PARAMS_IN_PAGE = 8;
+
    private ControllerHost _host;
    private MidiIn _midiIn;
    private MidiOut _midiOut;
@@ -21,6 +22,8 @@ public class D400GridExtension extends ControllerExtension
 
    private final Fader[] faders = new Fader[8];
    private final long[] _vuMeterLastSend = new long[8];
+
+   private int _selectedDevice = -1;
 
    protected D400GridExtension(final D400GridExtensionDefinition definition, final ControllerHost host)
    {
@@ -63,7 +66,7 @@ public class D400GridExtension extends ControllerExtension
       _trackBank = _host.createMainTrackBank (8, 0, 0);
       _trackBank.followCursorTrack (_cursorTrack);
       _deviceBank = _cursorTrack.createDeviceBank(8);
-      for (int i = 0; i < _trackBank.getSizeOfBank (); i++)
+      for (int i = 0; i < _deviceBank.getSizeOfBank (); i++)
       {
          _parameterBanks[i] = _deviceBank.getDevice(i).createCursorRemoteControlsPage(8);
       }
@@ -150,27 +153,64 @@ public class D400GridExtension extends ControllerExtension
       final ShortMidiMessage msg = new ShortMidiMessage (statusByte, data1, data2);
       _host.println(msg.toString());
 
-      if(statusByte == Midi.NOTE_ON && data2 > 0)
+      if(statusByte == Midi.NOTE_ON)
       {
-         switch (data1){
-            case D400.BTN_SELECT_1: selectTrack(0); break;
-            case D400.BTN_SELECT_2: selectTrack(1); break;
-            case D400.BTN_SELECT_3: selectTrack(2); break;
-            case D400.BTN_SELECT_4: selectTrack(3); break;
-            case D400.BTN_SELECT_5: selectTrack(4); break;
-            case D400.BTN_SELECT_6: selectTrack(5); break;
-            case D400.BTN_SELECT_7: selectTrack(6); break;
-            case D400.BTN_SELECT_8: selectTrack(7); break;
-            case D400.BUTTON_1: selectFx(0); break;
-            case D400.BUTTON_2: selectFx(1); break;
-            case D400.BUTTON_3: selectFx(2); break;
-            case D400.BUTTON_4: selectFx(3); break;
-            case D400.BUTTON_5: selectFx(4); break;
-            case D400.BUTTON_6: selectFx(5); break;
-            case D400.BUTTON_7: selectFx(6); break;
-            case D400.BUTTON_8: selectFx(7); break;
+         if (data1 == D400.SHUTTLE)
+         {
+            handleShuttle(data2);
+         }
+         else if(data2 > 0)
+         {
+            switch (data1)
+            {
+               case D400.BTN_SELECT_1: selectTrack(0); break;
+               case D400.BTN_SELECT_2: selectTrack(1); break;
+               case D400.BTN_SELECT_3: selectTrack(2); break;
+               case D400.BTN_SELECT_4: selectTrack(3); break;
+               case D400.BTN_SELECT_5: selectTrack(4); break;
+               case D400.BTN_SELECT_6: selectTrack(5); break;
+               case D400.BTN_SELECT_7: selectTrack(6); break;
+               case D400.BTN_SELECT_8: selectTrack(7); break;
+               case D400.BUTTON_1: selectFx(0); break;
+               case D400.BUTTON_2: selectFx(1); break;
+               case D400.BUTTON_3: selectFx(2); break;
+               case D400.BUTTON_4: selectFx(3); break;
+               case D400.BUTTON_5: selectFx(4); break;
+               case D400.BUTTON_6: selectFx(5); break;
+               case D400.BUTTON_7: selectFx(6); break;
+               case D400.BUTTON_8: selectFx(7); break;
+            }
          }
       }
+   }
+
+   private boolean _shuttleSettled = true;
+   private void handleShuttle(int amount)
+   {
+      _host.println("_selectedDevice: " + _selectedDevice);
+      if(amount == 0)
+      {
+         _host.println("Settled");
+         _shuttleSettled = true;
+         return;
+      }
+      if(_selectedDevice < 0 || !_shuttleSettled)
+      {
+         _host.println("Skip");
+         return;
+      }
+
+      if(amount == 8)
+      {
+         _host.println("Next");
+         _parameterBanks[_selectedDevice].selectNextPage(true);
+      }
+      else if( amount == 120)
+      {
+         _host.println("Previous");
+         _parameterBanks[_selectedDevice].selectPreviousPage(true);
+      }
+      _shuttleSettled = false;
    }
 
    private void selectTrack(int i)
@@ -196,7 +236,7 @@ public class D400GridExtension extends ControllerExtension
 
    private void clearFx(int exceptThisChannel)
    {
-      for (int f = 0; f < 8; f++)
+      for (int f = 0; f < _trackBank.getSizeOfBank(); f++)
       {
          Device device = _deviceBank.getDevice(f);
          if(f != exceptThisChannel)
@@ -204,6 +244,7 @@ public class D400GridExtension extends ControllerExtension
             device.isWindowOpen().set(false);
             device.isRemoteControlsSectionVisible().set(false);
          }
+         _midiOut.sendMidi(Midi.NOTE_ON, D400.BUTTON_1+f, f == exceptThisChannel ? 127 : 0);
       }
    }
 
@@ -218,10 +259,11 @@ public class D400GridExtension extends ControllerExtension
       _application.toggleNoteEditor();
       _application.toggleDevices();
 
-      for (int t = 0; t < 8; t++)
+      for (int t = 0; t < NUM_PARAMS_IN_PAGE; t++)
       {
          Parameter parameter = _parameterBanks[i].getParameter(t);
          faders[t].setBinding(parameter);
       }
+      _selectedDevice = i;
    }
 }
