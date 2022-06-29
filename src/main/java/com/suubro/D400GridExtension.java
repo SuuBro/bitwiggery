@@ -16,9 +16,11 @@ public class D400GridExtension extends ControllerExtension
    private HardwareSurface _hardwareSurface;
    private TrackBank _trackBank;
    private DeviceBank _deviceBank;
+   private final CursorRemoteControlsPage[] _parameterBanks = new CursorRemoteControlsPage[8];
    private Application _application;
+
+   private final Fader[] faders = new Fader[8];
    private final long[] _vuMeterLastSend = new long[8];
-   private int _selectedTrack = -1;
 
    protected D400GridExtension(final D400GridExtensionDefinition definition, final ControllerHost host)
    {
@@ -61,6 +63,10 @@ public class D400GridExtension extends ControllerExtension
       _trackBank = _host.createMainTrackBank (8, 0, 0);
       _trackBank.followCursorTrack (_cursorTrack);
       _deviceBank = _cursorTrack.createDeviceBank(8);
+      for (int i = 0; i < _trackBank.getSizeOfBank (); i++)
+      {
+         _parameterBanks[i] = _deviceBank.getDevice(i).createCursorRemoteControlsPage(8);
+      }
 
       for (int i = 0; i < _trackBank.getSizeOfBank (); i++)
       {
@@ -68,7 +74,8 @@ public class D400GridExtension extends ControllerExtension
          final Track track = _trackBank.getItemAt(i);
          track.volume().markInterested();
 
-         setUpFader(_trackBank, channel, track);
+         Fader fader = setUpFader(channel);
+         fader.setBinding(_trackBank.getItemAt(channel).volume());
 
          _vuMeterLastSend[channel] = Instant.now().toEpochMilli();
 
@@ -85,48 +92,26 @@ public class D400GridExtension extends ControllerExtension
       _host.showPopupNotification("D400Grid Initialized");
    }
 
-   private void setUpFader(TrackBank trackBank, int channel, Track track)
+   private Fader setUpFader(int channel)
    {
-      final HardwareSlider fader = _hardwareSurface.createHardwareSlider ("SLIDER_" + channel);
-      fader.setAdjustValueMatcher(_midiIn.createAbsolutePitchBendValueMatcher(channel));
-      fader.setBinding(trackBank.getItemAt(channel).volume());
-      fader.beginTouchAction().setActionMatcher(
+      HardwareSlider slider = _hardwareSurface.createHardwareSlider ("SLIDER_" + channel);
+      slider.setAdjustValueMatcher(_midiIn.createAbsolutePitchBendValueMatcher(channel));
+
+      slider.beginTouchAction().setActionMatcher(
               _midiIn.createActionMatcher("status == 0x90 && data1 == " + (0x68 + channel) + " && data2 > 0"));
-      fader.endTouchAction().setActionMatcher(
+      slider.endTouchAction().setActionMatcher(
               _midiIn.createActionMatcher("status == 0x90 && data1 == " + (0x68 + channel) + " && data2 == 0"));
-      fader.disableTakeOver();
+      slider.disableTakeOver();
 
-      fader.isBeingTouched().markInterested();
-      fader.targetValue().markInterested();
-      fader.isUpdatingTargetValue().markInterested();
-      fader.hasTargetValue().markInterested();
+      slider.isBeingTouched().markInterested();
+      slider.targetValue().markInterested();
+      slider.isUpdatingTargetValue().markInterested();
+      slider.hasTargetValue().markInterested();
 
-      final DoubleValueChangedCallback moveFader = new DoubleValueChangedCallback()
-      {
-         @Override
-         public void valueChanged(final double value)
-         {
-            if(!seenInitZero) // This seems to be called initially with value==0, which resets the sliders...
-            {
-               seenInitZero = true;
-               return;
-            }
-            if (!fader.isUpdatingTargetValue().get())
-            {
-               final int faderValue = Math.max(0, Math.min(16383, (int)(value * 16384.0)));
-
-               if (_lastSentValue != faderValue)
-               {
-                  _midiOut.sendMidi(0xE0 | channel, faderValue & 0x7f, faderValue >> 7);
-                  _lastSentValue = faderValue;
-               }
-            }
-         }
-
-         private int _lastSentValue = -1;
-         private boolean seenInitZero = false;
-      };
-      fader.targetValue().addValueObserver(moveFader);
+      final Fader fader = new Fader(_host, _midiOut, channel, slider);
+      slider.targetValue().addValueObserver(fader);
+      faders[channel] = fader;
+      return fader;
    }
 
    public void createButtonWithLight(final String name, final int midi, HardwareBindable binding,
@@ -158,7 +143,6 @@ public class D400GridExtension extends ControllerExtension
    public void flush()
    {
       _hardwareSurface.updateHardware();
-      //_transport.updateLEDs();
    }
 
    public void handleMidi (final int statusByte, final int data1, final int data2)
@@ -191,33 +175,53 @@ public class D400GridExtension extends ControllerExtension
 
    private void selectTrack(int i)
    {
-      for (int f = 0; f < 8; f++)
-      {
-         Device device = _deviceBank.getDevice(f);
-         device.isWindowOpen().set(false);
-      }
-      _trackBank.getItemAt(i).selectInEditor();
+      clearFx();
+      _application.toggleDevices();
+      _application.toggleNoteEditor();
       for (int t = 0; t < _trackBank.getSizeOfBank(); t++) {
+         Track track = _trackBank.getItemAt(t);
+         if(t == i)
+         {
+            track.selectInEditor();
+         }
          _midiOut.sendMidi(Midi.NOTE_ON, D400.BTN_SELECT_1+t, t == i ? 127 : 0);
+         faders[t].setBinding(track.volume());
       }
-      _selectedTrack = i;
    }
 
-   private void selectFx(int i)
+   private void clearFx()
+   {
+      clearFx(-1);
+   }
+
+   private void clearFx(int exceptThisChannel)
    {
       for (int f = 0; f < 8; f++)
       {
          Device device = _deviceBank.getDevice(f);
-         if(f != i)
+         if(f != exceptThisChannel)
          {
             device.isWindowOpen().set(false);
+            device.isRemoteControlsSectionVisible().set(false);
          }
       }
+   }
+
+   private void selectFx(int i)
+   {
+      clearFx(i);
       _deviceBank.scrollIntoView(i);
       Device device = _deviceBank.getDevice(i);
       device.selectInEditor();
       device.isWindowOpen().toggle();
+      device.isRemoteControlsSectionVisible().set(true);
       _application.toggleNoteEditor();
       _application.toggleDevices();
+
+      for (int t = 0; t < 8; t++)
+      {
+         Parameter parameter = _parameterBanks[i].getParameter(t);
+         faders[t].setBinding(parameter);
+      }
    }
 }
