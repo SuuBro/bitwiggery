@@ -7,6 +7,8 @@ import com.bitwig.extension.controller.ControllerExtension;
 import java.time.Instant;
 import java.util.function.BooleanSupplier;
 
+import static com.suubro.Midi.SYSEX_HDR;
+
 public class D400GridExtension extends ControllerExtension
 {
    private static final int NUM_PARAMS_IN_PAGE = 8;
@@ -23,6 +25,7 @@ public class D400GridExtension extends ControllerExtension
    private final Fader[] faders = new Fader[8];
    private final long[] _vuMeterLastSend = new long[8];
 
+   private boolean _deviceMode = false;
    private int _selectedDevice = -1;
 
    protected D400GridExtension(final D400GridExtensionDefinition definition, final ControllerHost host)
@@ -69,6 +72,10 @@ public class D400GridExtension extends ControllerExtension
       for (int i = 0; i < _deviceBank.getSizeOfBank (); i++)
       {
          _parameterBanks[i] = _deviceBank.getDevice(i).createCursorRemoteControlsPage(8);
+         for (int p = 0; p < NUM_PARAMS_IN_PAGE; p++)
+         {
+            _parameterBanks[i].getParameter(p).name().addValueObserver(this::buildDisplay);
+         }
       }
 
       for (int i = 0; i < _trackBank.getSizeOfBank (); i++)
@@ -76,9 +83,12 @@ public class D400GridExtension extends ControllerExtension
          final int channel = i;
          final Track track = _trackBank.getItemAt(i);
          track.volume().markInterested();
+         track.name().markInterested();
 
          Fader fader = setUpFader(channel);
          fader.setBinding(_trackBank.getItemAt(channel).volume());
+
+         track.name().addValueObserver(this::buildDisplay);
 
          _vuMeterLastSend[channel] = Instant.now().toEpochMilli();
 
@@ -93,6 +103,16 @@ public class D400GridExtension extends ControllerExtension
       }
 
       _host.showPopupNotification("D400Grid Initialized");
+   }
+
+   static String stringToHex(String string) {
+      StringBuilder buf = new StringBuilder(200);
+      for (char ch: string.toCharArray()) {
+         if (buf.length() > 0)
+            buf.append(' ');
+         buf.append(String.format("%02x", (int) ch));
+      }
+      return buf.toString();
    }
 
    private Fader setUpFader(int channel)
@@ -227,6 +247,9 @@ public class D400GridExtension extends ControllerExtension
          _midiOut.sendMidi(Midi.NOTE_ON, D400.BTN_SELECT_1+t, t == i ? 127 : 0);
          faders[t].setBinding(track.volume());
       }
+      _selectedDevice = -1;
+      _deviceMode = false;
+      buildDisplay("");
    }
 
    private void clearFx()
@@ -265,5 +288,37 @@ public class D400GridExtension extends ControllerExtension
          faders[t].setBinding(parameter);
       }
       _selectedDevice = i;
+      _deviceMode = true;
+      buildDisplay("");
+   }
+
+   private void buildDisplay(String unused) {
+      StringBuilder text = new StringBuilder();
+      if(_deviceMode)
+      {
+         for (int t = 0; t < NUM_PARAMS_IN_PAGE; t++)
+         {
+            String name = _parameterBanks[_selectedDevice].getParameter(t).name().get();
+            text.append(name, 0, Math.min(name.length(), 8));
+            if (name.length() < 8) {
+               for (int s = 0; s < 8 - name.length(); s++) {
+                  text.append(' ');
+               }
+            }
+         }
+      }
+      else {
+         for (int t = 0; t < _trackBank.getSizeOfBank(); t++) {
+            String name = _trackBank.getItemAt(t).name().get();
+            text.append(name, 0, Math.min(name.length(), 8));
+            if (name.length() < 8) {
+               for (int s = 0; s < 8 - name.length(); s++) {
+                  text.append(' ');
+               }
+            }
+         }
+      }
+      String sysExMessage = SYSEX_HDR + "18" + "00" + stringToHex(text.toString()) + "f7";
+      _midiOut.sendSysex(sysExMessage);
    }
 }
