@@ -7,8 +7,6 @@ import com.bitwig.extension.controller.ControllerExtension;
 import java.time.Instant;
 import java.util.function.BooleanSupplier;
 
-import static com.suubro.Midi.SYSEX_HDR;
-
 public class D400GridExtension extends ControllerExtension
 {
    private static final int NUM_PARAMS_IN_PAGE = 8;
@@ -75,6 +73,7 @@ public class D400GridExtension extends ControllerExtension
          for (int p = 0; p < NUM_PARAMS_IN_PAGE; p++)
          {
             _parameterBanks[i].getParameter(p).name().addValueObserver(this::buildDisplay);
+            _parameterBanks[i].getParameter(p).displayedValue().addValueObserver(this::buildDisplay);
          }
       }
 
@@ -89,6 +88,7 @@ public class D400GridExtension extends ControllerExtension
          fader.setBinding(_trackBank.getItemAt(channel).volume());
 
          track.name().addValueObserver(this::buildDisplay);
+         track.volume().displayedValue().addValueObserver(this::buildDisplay);
 
          _vuMeterLastSend[channel] = Instant.now().toEpochMilli();
 
@@ -292,33 +292,37 @@ public class D400GridExtension extends ControllerExtension
       buildDisplay("");
    }
 
-   private void buildDisplay(String unused) {
-      StringBuilder text = new StringBuilder();
+   private void buildDisplay(Object unused) {
+      StringBuilder line0 = new StringBuilder();
+      StringBuilder line1 = new StringBuilder();
       if(_deviceMode)
       {
          for (int t = 0; t < NUM_PARAMS_IN_PAGE; t++)
          {
-            String name = _parameterBanks[_selectedDevice].getParameter(t).name().get();
-            text.append(name, 0, Math.min(name.length(), 8));
-            if (name.length() < 8) {
-               for (int s = 0; s < 8 - name.length(); s++) {
-                  text.append(' ');
-               }
-            }
+            Parameter parameter = _parameterBanks[_selectedDevice].getParameter(t);
+            AddDisplayText(line0, parameter.name().get());
+            AddDisplayText(line1, parameter.displayedValue().get());
          }
       }
       else {
          for (int t = 0; t < _trackBank.getSizeOfBank(); t++) {
-            String name = _trackBank.getItemAt(t).name().get();
-            text.append(name, 0, Math.min(name.length(), 8));
-            if (name.length() < 8) {
-               for (int s = 0; s < 8 - name.length(); s++) {
-                  text.append(' ');
-               }
-            }
+            Track track = _trackBank.getItemAt(t);
+            AddDisplayText(line0, track.name().get());
+            AddDisplayText(line1, track.volume().displayedValue().get());
          }
       }
-      String sysExMessage = SYSEX_HDR + "18" + "00" + stringToHex(text.toString()) + "f7";
-      _midiOut.sendSysex(sysExMessage);
+      _midiOut.sendSysex(Midi.SYSEX_HDR + "18" + "00"
+              + stringToHex(line0.toString())
+              + stringToHex(line1.toString())
+              + Midi.SYSEX_END);
+   }
+
+   private void AddDisplayText(StringBuilder line, String text) {
+      line.append(text, 0, Math.min(text.length(), 8));
+      if (text.length() < 8) {
+         for (int s = 0; s < 8 - text.length(); s++) {
+            line.append(' ');
+         }
+      }
    }
 }
