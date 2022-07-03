@@ -1,9 +1,14 @@
 package com.suubro;
 
+import com.bitwig.extension.api.opensoundcontrol.OscAddressSpace;
+import com.bitwig.extension.api.opensoundcontrol.OscConnection;
+import com.bitwig.extension.api.opensoundcontrol.OscMessage;
+import com.bitwig.extension.api.opensoundcontrol.OscModule;
 import com.bitwig.extension.api.util.midi.ShortMidiMessage;
-import com.bitwig.extension.controller.api.*;
 import com.bitwig.extension.controller.ControllerExtension;
+import com.bitwig.extension.controller.api.*;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.util.function.BooleanSupplier;
 
@@ -26,19 +31,35 @@ public class D400GridExtension extends ControllerExtension
    private boolean _deviceMode = false;
    private int _selectedDevice = -1;
 
+   private OscConnection _oscGridOut;
+
    protected D400GridExtension(final D400GridExtensionDefinition definition, final ControllerHost host)
    {
       super(definition, host);
    }
 
    @Override
-   public void init()
-   {
+   public void init() {
       _host = getHost();
       _application = _host.createApplication();
+
       _midiIn = _host.getMidiInPort(0);
       _midiIn.setMidiCallback(this::handleMidi);
       _midiOut = _host.getMidiOutPort(0);
+
+      OscModule osc = _host.getOscModule();
+      OscAddressSpace addressSpace = osc.createAddressSpace();
+
+      int gridPort = 19762;
+      int listenPort = (int) Math.floor(Math.random() * 64512) + 1024;
+
+      SetUpGridCallbacks(addressSpace);
+      SetUpSerialOscCallbacks(addressSpace, gridPort);
+
+      osc.createUdpServer(listenPort, addressSpace);
+      SerialOscInit(osc, listenPort);
+      SetUpGrid(osc, gridPort, listenPort);
+
       Transport transport = _host.createTransport();
 
       _hardwareSurface = _host.createHardwareSurface();
@@ -64,21 +85,18 @@ public class D400GridExtension extends ControllerExtension
       transport.playStartPosition().addBinding(jogWheel);
 
       CursorTrack _cursorTrack = _host.createCursorTrack("D400_CURSOR_TRACK", "Cursor Track", 0, 0, true);
-      _trackBank = _host.createMainTrackBank (8, 0, 0);
-      _trackBank.followCursorTrack (_cursorTrack);
+      _trackBank = _host.createMainTrackBank(8, 0, 0);
+      _trackBank.followCursorTrack(_cursorTrack);
       _deviceBank = _cursorTrack.createDeviceBank(8);
-      for (int i = 0; i < _deviceBank.getSizeOfBank (); i++)
-      {
+      for (int i = 0; i < _deviceBank.getSizeOfBank(); i++) {
          _parameterBanks[i] = _deviceBank.getDevice(i).createCursorRemoteControlsPage(8);
-         for (int p = 0; p < NUM_PARAMS_IN_PAGE; p++)
-         {
+         for (int p = 0; p < NUM_PARAMS_IN_PAGE; p++) {
             _parameterBanks[i].getParameter(p).name().addValueObserver(this::buildDisplay);
             _parameterBanks[i].getParameter(p).displayedValue().addValueObserver(this::buildDisplay);
          }
       }
 
-      for (int i = 0; i < _trackBank.getSizeOfBank (); i++)
-      {
+      for (int i = 0; i < _trackBank.getSizeOfBank(); i++) {
          final int channel = i;
          final Track track = _trackBank.getItemAt(i);
          track.volume().markInterested();
@@ -94,15 +112,65 @@ public class D400GridExtension extends ControllerExtension
 
          track.addVuMeterObserver(14, -1, true, level -> {
             long now = Instant.now().toEpochMilli();
-            if (_vuMeterLastSend[channel] < now - 250)
-            {
+            if (_vuMeterLastSend[channel] < now - 250) {
                _midiOut.sendMidi(Midi.CHANNEL_PRESSURE, level + (channel << 4), 0);
                _vuMeterLastSend[channel] = now;
             }
-         } );
+         });
       }
 
       _host.showPopupNotification("D400Grid Initialized");
+   }
+
+   private void SerialOscInit(OscModule osc, int listenPort) {
+      OscConnection oscOut = osc.connectToUdpServer("127.0.0.1", 12002, osc.createAddressSpace());
+      try {
+         oscOut.sendMessage("/serialosc/list", "127.0.0.1", listenPort);
+      } catch (Exception e) {
+         throw new RuntimeException(e);
+      }
+   }
+
+   private void SetUpSerialOscCallbacks(OscAddressSpace addressSpace, int gridPort) {
+      addressSpace.registerDefaultMethod(this::handleUnknownMsg);
+      addressSpace.registerMethod("/serialosc/device", "*", "Device List", (source, message) ->
+      {
+         _host.println("Received: " + message.getAddressPattern()
+                 + " " + message.getTypeTag()
+                 + " " + message.getString(0)
+                 + " " + message.getString(1)
+                 + " " + message.getInt(2)
+         );
+
+         if(gridPort != message.getInt(2)){
+            String error = "DETECTED DIFFERENT GRID PORT TO THE ONE CONFIGURED." +
+                    " Configured: " + gridPort + " Detected: " + message.getInt(2);
+            _host.errorln(error);
+            _host.showPopupNotification(error);
+         }
+      });
+   }
+
+   private void SetUpGrid(OscModule osc, int devicePort, int listenPort) {
+      _oscGridOut = osc.connectToUdpServer("127.0.0.1", devicePort, osc.createAddressSpace());
+      try {
+         _oscGridOut.sendMessage("/sys/port", listenPort);
+         _oscGridOut.sendMessage("/sys/host", "127.0.0.1");
+         _oscGridOut.sendMessage("/sys/prefix", "/monome");
+         _oscGridOut.sendMessage("/sys/info");
+         _oscGridOut.sendMessage("/monome/grid/led/all", 0);
+      } catch (IOException e) {
+         throw new RuntimeException(e);
+      }
+   }
+
+   private void SetUpGridCallbacks(OscAddressSpace addressSpace) {
+      addressSpace.registerMethod("/monome/grid/key", "*", "Grid key pressed", (s, msg) ->
+              _host.println("Received: " + msg.getAddressPattern()
+                      + " " + msg.getTypeTag()
+                      + " " + msg.getInt(0)
+                      + " " + msg.getInt(1)
+                      + " " + msg.getInt(2)));
    }
 
    static String stringToHex(String string) {
@@ -324,5 +392,9 @@ public class D400GridExtension extends ControllerExtension
             line.append(' ');
          }
       }
+   }
+
+   private void handleUnknownMsg(OscConnection source, OscMessage message) {
+      _host.println("Received unknown: " + message.getAddressPattern());
    }
 }
