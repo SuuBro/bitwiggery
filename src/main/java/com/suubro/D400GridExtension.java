@@ -20,8 +20,12 @@ public class D400GridExtension extends ControllerExtension
    private MidiIn _midiIn;
    private MidiOut _midiOut;
    private HardwareSurface _hardwareSurface;
+   private Transport _transport;
    private TrackBank _trackBank;
+   private CursorTrack _cursorTrack;
+   private PinnableCursorClip _clip;
    private DeviceBank _deviceBank;
+   private SceneBank _sceneBank;
    private final CursorRemoteControlsPage[] _parameterBanks = new CursorRemoteControlsPage[8];
    private Application _application;
 
@@ -60,20 +64,20 @@ public class D400GridExtension extends ControllerExtension
       SerialOscInit(osc, listenPort);
       SetUpGrid(osc, gridPort, listenPort);
 
-      Transport transport = _host.createTransport();
+      _transport = _host.createTransport();
 
       _hardwareSurface = _host.createHardwareSurface();
 
       createButtonWithLight("PLAY", D400.BTN_PLAY,
-              transport.playAction(), transport.isPlaying());
+              _transport.playAction(), _transport.isPlaying());
       createButtonWithLight("STOP", D400.BTN_STOP,
-              transport.stopAction(), transport.isPlaying(), () -> !transport.isPlaying().get());
+              _transport.stopAction(), _transport.isPlaying(), () -> !_transport.isPlaying().get());
       createButtonWithLight("RECORD", D400.BTN_REC,
-              transport.recordAction(), transport.isArrangerRecordEnabled());
+              _transport.recordAction(), _transport.isArrangerRecordEnabled());
       createButtonWithLight("LOOP", D400.BTN_LOOP,
-              transport.isArrangerLoopEnabled().toggleAction(), transport.isArrangerLoopEnabled());
+              _transport.isArrangerLoopEnabled().toggleAction(), _transport.isArrangerLoopEnabled());
       createButtonWithLight("METRONOME", D400.BTN_METRONOME,
-              transport.isMetronomeEnabled().toggleAction(), transport.isMetronomeEnabled());
+              _transport.isMetronomeEnabled().toggleAction(), _transport.isMetronomeEnabled());
 
       final RelativeHardwareKnob jogWheel = _hardwareSurface.createRelativeHardwareKnob("JOG_WHEEL");
       final RelativeHardwareValueMatcher stepDownMatcher = _midiIn.createRelativeValueMatcher(
@@ -82,12 +86,14 @@ public class D400GridExtension extends ControllerExtension
               "(status == 144 && data1 == " + D400.JOG_WHEEL + " && data2 < 65)", 0.25);
       final RelativeHardwareValueMatcher relativeMatcher = _host.createOrRelativeHardwareValueMatcher(stepDownMatcher, stepUpMatcher);
       jogWheel.setAdjustValueMatcher(relativeMatcher);
-      transport.playStartPosition().addBinding(jogWheel);
+      _transport.playStartPosition().addBinding(jogWheel);
 
-      CursorTrack _cursorTrack = _host.createCursorTrack("D400_CURSOR_TRACK", "Cursor Track", 0, 0, true);
+      _cursorTrack = _host.createCursorTrack("D400_CURSOR_TRACK", "Cursor Track", 0, 0, true);
       _trackBank = _host.createMainTrackBank(8, 0, 0);
       _trackBank.followCursorTrack(_cursorTrack);
       _deviceBank = _cursorTrack.createDeviceBank(8);
+      _sceneBank = _host.createSceneBank(8);
+
       for (int i = 0; i < _deviceBank.getSizeOfBank(); i++) {
          _parameterBanks[i] = _deviceBank.getDevice(i).createCursorRemoteControlsPage(8);
          for (int p = 0; p < NUM_PARAMS_IN_PAGE; p++) {
@@ -119,7 +125,28 @@ public class D400GridExtension extends ControllerExtension
          });
       }
 
+      _clip = _cursorTrack.createLauncherCursorClip(256*16, 127);
+      _clip.addNoteStepObserver(this::onNoteStepChanged);
+      _clip.clipLauncherSlot().sceneIndex().markInterested();
+
       _host.showPopupNotification("D400Grid Initialized");
+   }
+
+   private void onNoteStepChanged(NoteStep step) {
+      _host.println("Step:   x: " + step.x() + " y: " + step.y() + " d: " + step.duration() + " v: " + step.velocity());
+      try {
+         _oscGridOut.sendMessage("/monome/grid/led/set", step.x(), 8 - (step.y() % 8), step.velocity() > 0 ? 1 : 0);
+      } catch (IOException e) {
+         throw new RuntimeException(e);
+      }
+   }
+
+   private void onGridKeyPressed(OscConnection s, OscMessage msg) {
+      _host.println("Received: " + msg.getAddressPattern()
+              + " " + msg.getTypeTag()
+              + " " + msg.getInt(0)
+              + " " + msg.getInt(1)
+              + " " + msg.getInt(2));
    }
 
    private void SerialOscInit(OscModule osc, int listenPort) {
@@ -165,12 +192,7 @@ public class D400GridExtension extends ControllerExtension
    }
 
    private void SetUpGridCallbacks(OscAddressSpace addressSpace) {
-      addressSpace.registerMethod("/monome/grid/key", "*", "Grid key pressed", (s, msg) ->
-              _host.println("Received: " + msg.getAddressPattern()
-                      + " " + msg.getTypeTag()
-                      + " " + msg.getInt(0)
-                      + " " + msg.getInt(1)
-                      + " " + msg.getInt(2)));
+      addressSpace.registerMethod("/monome/grid/key", "*", "Grid key pressed", this::onGridKeyPressed);
    }
 
    static String stringToHex(String string) {
@@ -239,7 +261,7 @@ public class D400GridExtension extends ControllerExtension
    public void handleMidi (final int statusByte, final int data1, final int data2)
    {
       final ShortMidiMessage msg = new ShortMidiMessage (statusByte, data1, data2);
-      _host.println(msg.toString());
+      //_host.println(msg.toString());
 
       if(statusByte == Midi.NOTE_ON)
       {
@@ -275,42 +297,61 @@ public class D400GridExtension extends ControllerExtension
    private boolean _shuttleSettled = true;
    private void handleShuttle(int amount)
    {
-      _host.println("_selectedDevice: " + _selectedDevice);
       if(amount == 0)
       {
          _host.println("Settled");
          _shuttleSettled = true;
          return;
       }
-      if(_selectedDevice < 0 || !_shuttleSettled)
+      if(!_shuttleSettled)
       {
          _host.println("Skip");
          return;
       }
 
-      if(amount == 8)
+      if(_deviceMode)
       {
-         _host.println("Next");
-         _parameterBanks[_selectedDevice].selectNextPage(true);
+         if(amount == 8)
+         {
+            _host.println("Next Device");
+            _parameterBanks[_selectedDevice].selectNextPage(true);
+         }
+         else if( amount == 120)
+         {
+            _host.println("Previous Device");
+            _parameterBanks[_selectedDevice].selectPreviousPage(true);
+         }
       }
-      else if( amount == 120)
+      else
       {
-         _host.println("Previous");
-         _parameterBanks[_selectedDevice].selectPreviousPage(true);
+         if(amount == 8)
+         {
+            _host.println("Next Scene");
+            _clip.selectNext();
+         }
+         else if( amount == 120)
+         {
+            _host.println("Previous Scene");
+            _clip.selectPrevious();
+         }
       }
+
       _shuttleSettled = false;
    }
 
    private void selectTrack(int i)
    {
       clearFx();
-      _application.toggleDevices();
-      _application.toggleNoteEditor();
       for (int t = 0; t < _trackBank.getSizeOfBank(); t++) {
          Track track = _trackBank.getItemAt(t);
          if(t == i)
          {
             track.selectInEditor();
+            track.makeVisibleInArranger();
+            _cursorTrack.selectSlot(_clip.clipLauncherSlot().sceneIndex().get());
+            _clip.selectClip(_clip);
+            _clip.clipLauncherSlot().select();
+            _clip.clipLauncherSlot().showInEditor();
          }
          _midiOut.sendMidi(Midi.NOTE_ON, D400.BTN_SELECT_1+t, t == i ? 127 : 0);
          faders[t].setBinding(track.volume());
@@ -345,10 +386,8 @@ public class D400GridExtension extends ControllerExtension
       _deviceBank.scrollIntoView(i);
       Device device = _deviceBank.getDevice(i);
       device.selectInEditor();
-      device.isWindowOpen().toggle();
+      device.isWindowOpen().set(true);
       device.isRemoteControlsSectionVisible().set(true);
-      _application.toggleNoteEditor();
-      _application.toggleDevices();
 
       for (int t = 0; t < NUM_PARAMS_IN_PAGE; t++)
       {
