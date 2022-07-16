@@ -1,9 +1,6 @@
-com\suubro\handler\Mode.class
-com\suubro\handler\ModeHandler.class
 com\suubro\Midi.class
-com\suubro\handler\TrackHandler.class
 com\suubro\D400GridExtension.class
-com\suubro\handler\RemoteControlHandler.class
 com\suubro\D400GridExtensionDefinition.class
 com\suubro\D400.class
 com\suubro\Fader.class
+com\suubro\Grid.class

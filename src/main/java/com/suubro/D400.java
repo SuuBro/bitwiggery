@@ -1,9 +1,5 @@
 package com.suubro;
 
-import com.bitwig.extension.controller.api.*;
-
-import java.util.Arrays;
-
 public class D400
 {
     public static final int CHANNEL         = 0;
@@ -93,30 +89,4 @@ public class D400
     public static final int KNOB_3          = 114;
     public static final int KNOB_BTN_4      = 60;
     public static final int KNOB_4          = 34;
-
-    private final MidiOut         portOut;
-    private final int []          ledCache             = new int [128];
-
-    public D400(ControllerHost host, final MidiIn inputPort, final MidiOut outputPort, final Transport transport)
-    {
-        this.portOut = outputPort;
-        final HardwareSurface hardwareSurface = host.createHardwareSurface ();
-        final HardwareButton playButton = hardwareSurface.createHardwareButton ("PLAY_BUTTON");
-
-        playButton.pressedAction().setActionMatcher(inputPort.createNoteOnActionMatcher(CHANNEL, BTN_PLAY));
-        playButton.pressedAction().setBinding (transport.playAction ());
-
-        Arrays.fill (this.ledCache, -1);
-
-
-    }
-
-    public void updateLED (final int note, final boolean isOn)
-    {
-        final int value = isOn ? 127 : 0;
-        if (this.ledCache[note] == value)
-            return;
-        this.ledCache[note] = value;
-        this.portOut.sendMidi (0x90, note, value);
-    }
 }
