@@ -6,6 +6,7 @@ import com.bitwig.extension.api.opensoundcontrol.OscMessage;
 import com.bitwig.extension.api.opensoundcontrol.OscModule;
 import com.bitwig.extension.controller.api.ControllerHost;
 import com.bitwig.extension.controller.api.NoteStep;
+import com.bitwig.extension.controller.api.PinnableCursorClip;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -45,8 +46,10 @@ public class Grid
     public static final int WIDTH = 16;
 
     private final ControllerHost _host;
+    private PinnableCursorClip _clip;
     private final OscConnection _oscOut;
 
+    private final int[] _lastDownpressByRow = {-1, -1, -1, -1, -1, -1, -1, -1};
     private int _currentStep = -1;
     private double _zoomLevel = 0.25;
     private int _earliestDisplayedNote = 0;
@@ -55,8 +58,9 @@ public class Grid
 
     int[][] _ledDisplay = new int[WIDTH][HEIGHT];
 
-    public Grid(ControllerHost _host) {
-        this._host = _host;
+    public Grid(ControllerHost host, PinnableCursorClip clip) {
+        _host = host;
+        _clip = clip;
         OscModule osc = _host.getOscModule();
 
         try {
@@ -94,17 +98,22 @@ public class Grid
     public void Render()
     {
         Clear();
-        for (int x = 0; x < WIDTH; x++) {
-            for (int y = 0; y < HEIGHT; y++) {
+        for (int x = 0; x < WIDTH; x++)
+        {
+            for (int y = 0; y < HEIGHT; y++)
+            {
                 Key key = new Key(x + _earliestDisplayedNote, y + _lowestDisplayedPitch);
                 boolean alreadyDisplayed = _ledDisplay[x][HEIGHT - y - 1] > 0;
-                if (!alreadyDisplayed && _notes.containsKey(key)) {
+                if (!alreadyDisplayed && _notes.containsKey(key))
+                {
                     NoteStep note = _notes.get(key);
-                    if (note.velocity() > 0) {
+                    if (note.velocity() > 0)
+                    {
                         int length = (int) (note.duration() / _zoomLevel);
                         _ledDisplay[x][HEIGHT - y - 1] = 12;
                         int lastIndexToUpdate = Math.min(x+length, WIDTH);
-                        for (int i = x+1; i < lastIndexToUpdate; i++) {
+                        for (int i = x+1; i < lastIndexToUpdate; i++)
+                        {
                             _ledDisplay[i][HEIGHT - y - 1] = 6;
                         }
                     }
@@ -123,12 +132,58 @@ public class Grid
         Render();
     }
 
-    private void onKeyPressed(OscConnection s, OscMessage msg) {
-        _host.println("Received: " + msg.getAddressPattern()
-                + " " + msg.getTypeTag()
-                + " " + msg.getInt(0)
-                + " " + msg.getInt(1)
-                + " " + msg.getInt(2));
+    private void onKey(OscConnection s, OscMessage msg) {
+        int x = msg.getInt(0);
+        int y = msg.getInt(1);
+        boolean downPress = msg.getInt(2) > 0;
+
+        _host.println(msg.getAddressPattern()
+                + " x: " + x
+                + " y: " + y
+                + " downPress: " + downPress);
+
+        int position = x + _earliestDisplayedNote;
+        int pitch = _lowestDisplayedPitch + HEIGHT - 1 - y;
+        int lastDownPress = _lastDownpressByRow[y];
+
+        _host.println(" position: " + position + " pitch: " + pitch + " lastDownPress: " + lastDownPress);
+
+        if(downPress && lastDownPress >= 0 && lastDownPress != x) {
+            int start = _earliestDisplayedNote + Math.min(x, lastDownPress);
+            int end = _earliestDisplayedNote + Math.max(x, lastDownPress);
+            _host.println(" start: " + start + " end: " + end);
+            for (int i = start; i < end; i++)
+            {
+                NoteStep existing = _notes.getOrDefault(new Key(i, pitch), null);
+                if (existing != null && existing.velocity() > 0)
+                {
+                    return; // clash with existing note
+                }
+            }
+            double duration = (end + 1 - start) * _zoomLevel;
+            _clip.setStep(start, pitch, 127, duration);
+            _lastDownpressByRow[y] = -1;
+        }
+        else if (!downPress && lastDownPress >= 0)
+        {
+            if (lastDownPress == x) // Same key released
+            {
+                NoteStep existing = _notes.getOrDefault(new Key(_earliestDisplayedNote + x, pitch), null);
+                if (existing != null && existing.velocity() > 0)
+                {
+                    _clip.clearStep(position, pitch);
+                }
+                else
+                {
+                    _clip.setStep(position, pitch, 127, 1 * _zoomLevel);
+                }
+            }
+            _lastDownpressByRow[y] = -1;
+        }
+        else if (downPress)
+        {
+            _lastDownpressByRow[y] = x;
+        }
     }
 
     private void SetUpOsc(OscModule osc, int listenPort) throws IOException
@@ -141,7 +196,7 @@ public class Grid
 
         addressSpace.registerDefaultMethod(this::handleUnknownMsg);
 
-        addressSpace.registerMethod("/monome/grid/key", "*", "Grid key pressed", this::onKeyPressed);
+        addressSpace.registerMethod("/monome/grid/key", "*", "Grid key pressed", this::onKey);
 
         addressSpace.registerMethod("/serialosc/device", "*", "Device List", (source, message) ->
         {

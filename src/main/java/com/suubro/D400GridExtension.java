@@ -46,7 +46,13 @@ public class D400GridExtension extends ControllerExtension
       _midiIn.setMidiCallback(this::handleMidi);
       _midiOut = _host.getMidiOutPort(0);
 
-      _grid = new Grid(_host);
+      _cursorTrack = _host.createCursorTrack("D400_CURSOR_TRACK", "Cursor Track", 0, 0, true);
+      _clip = _cursorTrack.createLauncherCursorClip(256*16, 127);
+      _clip.addNoteStepObserver(this::onNoteStepChanged);
+      _clip.clipLauncherSlot().sceneIndex().markInterested();
+      _clip.playingStep().addValueObserver(stepIndex -> _grid.UpdatePlayingStep(stepIndex));
+
+      _grid = new Grid(_host, _clip);
 
       _transport = _host.createTransport();
       _hardwareSurface = _host.createHardwareSurface();
@@ -71,7 +77,6 @@ public class D400GridExtension extends ControllerExtension
       jogWheel.setAdjustValueMatcher(relativeMatcher);
       _transport.playStartPosition().addBinding(jogWheel);
 
-      _cursorTrack = _host.createCursorTrack("D400_CURSOR_TRACK", "Cursor Track", 0, 0, true);
       _trackBank = _host.createMainTrackBank(8, 0, 0);
       _trackBank.followCursorTrack(_cursorTrack);
       _deviceBank = _cursorTrack.createDeviceBank(8);
@@ -108,10 +113,7 @@ public class D400GridExtension extends ControllerExtension
          });
       }
 
-      _clip = _cursorTrack.createLauncherCursorClip(256*16, 127);
-      _clip.addNoteStepObserver(this::onNoteStepChanged);
-      _clip.clipLauncherSlot().sceneIndex().markInterested();
-      _clip.playingStep().addValueObserver(stepIndex -> _grid.UpdatePlayingStep(stepIndex));
+
       _host.showPopupNotification("D400Grid Initialized");
    }
 

@@ -9,6 +9,7 @@ public class MonomeGridOscUtil
     static void LedLevelMapByOsc(int[][] ledDisplay, OscConnection oscOut) {
         try
         {
+            oscOut.startBundle();
             for (int xOffset = 0; xOffset < Grid.WIDTH / 8; xOffset++)
             {
                 int xLookup = xOffset * 8;
@@ -80,6 +81,7 @@ public class MonomeGridOscUtil
                         ledDisplay[xLookup+7][yLookup +7]
                 );
             }
+            oscOut.endBundle();
         }
         catch (IOException e)
         {
