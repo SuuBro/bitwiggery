@@ -1,6 +1,8 @@
+com\suubro\Key.class
 com\suubro\Midi.class
 com\suubro\D400GridExtension.class
 com\suubro\D400GridExtensionDefinition.class
+com\suubro\MonomeGridOscUtil.class
 com\suubro\D400.class
 com\suubro\Fader.class
 com\suubro\Grid.class
