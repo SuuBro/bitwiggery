@@ -103,8 +103,9 @@ public class Grid
                     if (note.velocity() > 0) {
                         int length = (int) (note.duration() / _zoomLevel);
                         _ledDisplay[x][HEIGHT - y - 1] = 12;
-                        for (int d = 1; d < length; d++) {
-                            _ledDisplay[x+d][HEIGHT - y - 1] = 6;
+                        int lastIndexToUpdate = Math.min(x+length, WIDTH);
+                        for (int i = x+1; i < lastIndexToUpdate; i++) {
+                            _ledDisplay[i][HEIGHT - y - 1] = 6;
                         }
                     }
                 }
