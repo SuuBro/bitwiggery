@@ -261,13 +261,21 @@ public class D400GridExtension extends ControllerExtension
    public void handleMidi (final int statusByte, final int data1, final int data2)
    {
       final ShortMidiMessage msg = new ShortMidiMessage (statusByte, data1, data2);
-      //_host.println(msg.toString());
+      _host.println(msg.toString());
 
       if(statusByte == Midi.NOTE_ON)
       {
          if (data1 == D400.SHUTTLE)
          {
             handleShuttle(data2);
+         }
+         else if(data1 == D400.BTN_ASSIGN1)
+         {
+            _application.setPanelLayout(_application.PANEL_LAYOUT_ARRANGE);
+         }
+         else if (data1 == D400.BTN_ASSIGN2)
+         {
+            _application.setPanelLayout(_application.PANEL_LAYOUT_EDIT);
          }
          else if(data2 > 0)
          {
@@ -342,6 +350,7 @@ public class D400GridExtension extends ControllerExtension
    private void selectTrack(int i)
    {
       clearFx();
+
       for (int t = 0; t < _trackBank.getSizeOfBank(); t++) {
          Track track = _trackBank.getItemAt(t);
          if(t == i)
@@ -386,7 +395,7 @@ public class D400GridExtension extends ControllerExtension
       _deviceBank.scrollIntoView(i);
       Device device = _deviceBank.getDevice(i);
       device.selectInEditor();
-      device.isWindowOpen().set(true);
+      device.isWindowOpen().toggle();
       device.isRemoteControlsSectionVisible().set(true);
 
       for (int t = 0; t < NUM_PARAMS_IN_PAGE; t++)
