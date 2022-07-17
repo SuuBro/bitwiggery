@@ -48,7 +48,7 @@ public class D400GridExtension extends ControllerExtension
 
       _cursorTrack = _host.createCursorTrack("D400_CURSOR_TRACK", "Cursor Track", 0, 0, true);
       _clip = _cursorTrack.createLauncherCursorClip(Grid.VIRTUAL_WIDTH, Grid.VIRTUAL_HEIGHT);
-      _clip.addNoteStepObserver(this::onNoteStepChanged);
+
       _clip.clipLauncherSlot().sceneIndex().markInterested();
 
       _grid = new Grid(_host, _clip);
@@ -103,18 +103,7 @@ public class D400GridExtension extends ControllerExtension
          });
       }
 
-
       _host.showPopupNotification("D400Grid Initialized");
-   }
-
-   private void onNoteStepChanged(NoteStep step) {
-      _host.println("Step:  "
-              + " x: " + step.x()
-              + " y: " + step.y()
-              + " d: " + step.duration()
-              + " v: " + step.velocity()
-      );
-      _grid.OnStepChange(step);
    }
 
    static String stringToHex(String string) {
@@ -214,6 +203,7 @@ public class D400GridExtension extends ControllerExtension
                case D400.BTN_ASSIGN1: _application.setPanelLayout(_application.PANEL_LAYOUT_ARRANGE); break;
                case D400.BTN_ASSIGN2: _application.setPanelLayout(_application.PANEL_LAYOUT_EDIT); break;
                case D400.JOG_WHEEL: _grid.HorizontalScroll(relative(data2)); break;
+               case D400.EQ_KNOB_3: _grid.Zoom(relative(data2)); break;
                case D400.EQ_KNOB_4: _grid.VerticalScroll(relative(data2)); break;
             }
          }

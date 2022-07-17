@@ -1,5 +1,6 @@
 com\suubro\Key.class
 com\suubro\Midi.class
+com\suubro\Scales.class
 com\suubro\D400GridExtension.class
 com\suubro\D400GridExtensionDefinition.class
 com\suubro\MonomeGridOscUtil.class

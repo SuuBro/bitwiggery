@@ -68,6 +68,7 @@ public class Grid
         _clip.getLoopStart().addValueObserver(d -> Render());
         _clip.getLoopLength().addValueObserver(d -> Render());
         _clip.playingStep().addValueObserver(this::UpdatePlayingStep);
+        _clip.addNoteStepObserver(this::OnStepChange);
 
         OscModule osc = _host.getOscModule();
 
@@ -271,7 +272,23 @@ public class Grid
     {
         _lowestDisplayedPitch += amount;
         _lowestDisplayedPitch = Math.min(Math.max(_lowestDisplayedPitch, 0), VIRTUAL_HEIGHT-HEIGHT);
-        _host.println("_lowestDisplayedPitch: " + _lowestDisplayedPitch);
+        _host.showPopupNotification("Lowest Note: " + Scales.pitchToNoteName(_lowestDisplayedPitch));
+        Render();
+    }
+
+    public void Zoom(int relative)
+    {
+        if(relative > 0)
+        {
+            _zoomLevel = _zoomLevel / 2.0;
+        }
+        else
+        {
+            _zoomLevel = _zoomLevel * 2.0;
+        }
+        _host.println("zoom: " + _zoomLevel);
+        _clip.setStepSize(_zoomLevel);
+        _host.showPopupNotification("Zoom level: " + _zoomLevel);
         Render();
     }
 }
