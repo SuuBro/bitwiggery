@@ -184,17 +184,15 @@ public class D400GridExtension extends ControllerExtension
    public void handleMidi (final int statusByte, final int data1, final int data2)
    {
       final ShortMidiMessage msg = new ShortMidiMessage (statusByte, data1, data2);
-      _host.println(msg.toString());
+      //_host.println(msg.toString());
+      _host.println("    ");
+
 
       if(statusByte == Midi.NOTE_ON)
       {
          if (data1 == D400.SHUTTLE)
          {
             handleShuttle(data2);
-         }
-         if(data1 == D400.JOG_WHEEL)
-         {
-            handleJogWheel(data2);
          }
          else if(data2 > 0)
          {
@@ -218,17 +216,18 @@ public class D400GridExtension extends ControllerExtension
                case D400.BUTTON_8: selectFx(7); break;
                case D400.BTN_ASSIGN1: _application.setPanelLayout(_application.PANEL_LAYOUT_ARRANGE); break;
                case D400.BTN_ASSIGN2: _application.setPanelLayout(_application.PANEL_LAYOUT_EDIT); break;
+               case D400.JOG_WHEEL: _grid.HorizontalScroll(relative(data2)); break;
+               case D400.EQ_KNOB_4: _grid.VerticalScroll(relative(data2)); break;
             }
          }
       }
    }
 
-   private void handleJogWheel(int value)
+   private int relative(int midiData)
    {
-      int amount = value > 64
-              ? (128 - value) * -1
-              : value;
-      _grid.HorizontalScroll(amount);
+      return midiData > 64
+              ? (128 - midiData) * -1
+              : midiData;
    }
 
    private boolean _shuttleSettled = true;

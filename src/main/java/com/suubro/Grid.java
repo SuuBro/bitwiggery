@@ -110,23 +110,32 @@ public class Grid
                     .sorted(Comparator.comparingInt(NoteStep::x))
                     .collect(Collectors.toList());
 
-            HashSet<Integer> seenPositions = new HashSet<>();
-            _host.println(" notesAtPitch size: " + notesAtPitch.size());
-
+            HashSet<Integer> seenNotes = new HashSet<>();
             for (NoteStep note:notesAtPitch)
             {
-                int start = Math.max(note.x() - _earliestDisplayedNote, 0);
-                int end = Math.min(note.x() + (int)(note.duration() / _zoomLevel) - _earliestDisplayedNote, WIDTH);
-                _host.println(" start: " + start + " end: " + end);
-                if(end <= 0 || start > WIDTH-1 || seenPositions.contains(start))
+                if(seenNotes.contains(note.x()))
                 {
                     continue;
                 }
-                _ledDisplay[start][HEIGHT - y - 1] = 12;
-                seenPositions.add(start);
-                for (int i = start+1; i < end; i++) {
-                    _ledDisplay[i][HEIGHT - y - 1] = 6;
-                    seenPositions.add(i);
+                seenNotes.add(note.x());
+
+                int actualStart = note.x() - _earliestDisplayedNote;
+                int actualEnd = note.x() + (int)(note.duration() / _zoomLevel) - _earliestDisplayedNote;
+
+                for (int i = 1; i < actualEnd-actualStart; i++) {
+                    seenNotes.add(note.x()+i);
+                }
+
+                if(actualEnd <= 0 || actualStart >= WIDTH)
+                {
+                    continue; // Nothing to display
+                }
+                int start = Math.max(actualStart, 0);
+                int end = Math.min(actualEnd, WIDTH);
+
+                _ledDisplay[start][HEIGHT - y - 1] = actualStart == start ? 12 : 6;
+                for (int i = 1; i < end-start; i++) {
+                    _ledDisplay[start+i][HEIGHT - y - 1] = 6;
                 }
             }
 
@@ -228,7 +237,8 @@ public class Grid
         });
     }
 
-    private void handleUnknownMsg(OscConnection source, OscMessage message) {
+    private void handleUnknownMsg(OscConnection source, OscMessage message)
+    {
         _host.println("Received unknown: " + message.getAddressPattern());
     }
 
@@ -236,7 +246,14 @@ public class Grid
     {
         _earliestDisplayedNote += amount;
         _earliestDisplayedNote = Math.min(Math.max(_earliestDisplayedNote, 0), VIRTUAL_WIDTH-WIDTH);
-        _host.println("Scroll " + amount + " to: " + _earliestDisplayedNote);
+        Render();
+    }
+
+    public void VerticalScroll(int amount)
+    {
+        _lowestDisplayedPitch += amount;
+        _lowestDisplayedPitch = Math.min(Math.max(_lowestDisplayedPitch, 0), VIRTUAL_HEIGHT-HEIGHT);
+        _host.println("_lowestDisplayedPitch: " + _lowestDisplayedPitch);
         Render();
     }
 }
