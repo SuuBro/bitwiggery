@@ -50,7 +50,6 @@ public class D400GridExtension extends ControllerExtension
       _clip = _cursorTrack.createLauncherCursorClip(Grid.VIRTUAL_WIDTH, Grid.VIRTUAL_HEIGHT);
       _clip.addNoteStepObserver(this::onNoteStepChanged);
       _clip.clipLauncherSlot().sceneIndex().markInterested();
-      _clip.playingStep().addValueObserver(stepIndex -> _grid.UpdatePlayingStep(stepIndex));
 
       _grid = new Grid(_host, _clip);
 
@@ -185,8 +184,6 @@ public class D400GridExtension extends ControllerExtension
    {
       final ShortMidiMessage msg = new ShortMidiMessage (statusByte, data1, data2);
       //_host.println(msg.toString());
-      _host.println("    ");
-
 
       if(statusByte == Midi.NOTE_ON)
       {

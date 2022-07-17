@@ -62,8 +62,13 @@ public class Grid
 
     public Grid(ControllerHost host, PinnableCursorClip clip) {
         _host = host;
+
         _clip = clip;
         _clip.setStepSize(_zoomLevel);
+        _clip.getLoopStart().addValueObserver(d -> Render());
+        _clip.getLoopLength().addValueObserver(d -> Render());
+        _clip.playingStep().addValueObserver(this::UpdatePlayingStep);
+
         OscModule osc = _host.getOscModule();
 
         try {
@@ -139,10 +144,23 @@ public class Grid
                 }
             }
 
+            double loopStart = _clip.getLoopStart().get() / _zoomLevel;
+            double loopEnd = (_clip.getLoopStart().get() + _clip.getLoopLength().get()) / _zoomLevel;
+
             for (int x = 0; x < WIDTH; x++)
             {
-                if (_currentStep == _earliestDisplayedNote + x) {
-                    _ledDisplay[x][HEIGHT - y - 1] += 3;
+                int oldValue = _ledDisplay[x][HEIGHT - y - 1];
+                if (_currentStep == _earliestDisplayedNote + x)
+                {
+                    _ledDisplay[x][HEIGHT - y - 1] = oldValue + 3;
+                }
+                else if (_earliestDisplayedNote + x < loopStart)
+                {
+                    _ledDisplay[x][HEIGHT - y - 1] = oldValue == 0 ? 2 : oldValue;
+                }
+                else if (_earliestDisplayedNote + x >= loopEnd)
+                {
+                    _ledDisplay[x][HEIGHT - y - 1] = oldValue == 0 ? 2 : oldValue;
                 }
             }
         }
