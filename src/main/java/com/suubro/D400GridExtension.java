@@ -47,7 +47,7 @@ public class D400GridExtension extends ControllerExtension
       _midiOut = _host.getMidiOutPort(0);
 
       _cursorTrack = _host.createCursorTrack("D400_CURSOR_TRACK", "Cursor Track", 0, 0, true);
-      _clip = _cursorTrack.createLauncherCursorClip(256*16, 127);
+      _clip = _cursorTrack.createLauncherCursorClip(Grid.VIRTUAL_WIDTH, Grid.VIRTUAL_HEIGHT);
       _clip.addNoteStepObserver(this::onNoteStepChanged);
       _clip.clipLauncherSlot().sceneIndex().markInterested();
       _clip.playingStep().addValueObserver(stepIndex -> _grid.UpdatePlayingStep(stepIndex));
@@ -67,15 +67,6 @@ public class D400GridExtension extends ControllerExtension
               _transport.isArrangerLoopEnabled().toggleAction(), _transport.isArrangerLoopEnabled());
       createButtonWithLight("METRONOME", D400.BTN_METRONOME,
               _transport.isMetronomeEnabled().toggleAction(), _transport.isMetronomeEnabled());
-
-      final RelativeHardwareKnob jogWheel = _hardwareSurface.createRelativeHardwareKnob("JOG_WHEEL");
-      final RelativeHardwareValueMatcher stepDownMatcher = _midiIn.createRelativeValueMatcher(
-              "(status == 144 && data1 == " + D400.JOG_WHEEL + " && data2 > 64)", -0.25);
-      final RelativeHardwareValueMatcher stepUpMatcher = _midiIn.createRelativeValueMatcher(
-              "(status == 144 && data1 == " + D400.JOG_WHEEL + " && data2 < 65)", 0.25);
-      final RelativeHardwareValueMatcher relativeMatcher = _host.createOrRelativeHardwareValueMatcher(stepDownMatcher, stepUpMatcher);
-      jogWheel.setAdjustValueMatcher(relativeMatcher);
-      _transport.playStartPosition().addBinding(jogWheel);
 
       _trackBank = _host.createMainTrackBank(8, 0, 0);
       _trackBank.followCursorTrack(_cursorTrack);
@@ -201,13 +192,9 @@ public class D400GridExtension extends ControllerExtension
          {
             handleShuttle(data2);
          }
-         else if(data1 == D400.BTN_ASSIGN1)
+         if(data1 == D400.JOG_WHEEL)
          {
-            _application.setPanelLayout(_application.PANEL_LAYOUT_ARRANGE);
-         }
-         else if (data1 == D400.BTN_ASSIGN2)
-         {
-            _application.setPanelLayout(_application.PANEL_LAYOUT_EDIT);
+            handleJogWheel(data2);
          }
          else if(data2 > 0)
          {
@@ -229,9 +216,19 @@ public class D400GridExtension extends ControllerExtension
                case D400.BUTTON_6: selectFx(5); break;
                case D400.BUTTON_7: selectFx(6); break;
                case D400.BUTTON_8: selectFx(7); break;
+               case D400.BTN_ASSIGN1: _application.setPanelLayout(_application.PANEL_LAYOUT_ARRANGE); break;
+               case D400.BTN_ASSIGN2: _application.setPanelLayout(_application.PANEL_LAYOUT_EDIT); break;
             }
          }
       }
+   }
+
+   private void handleJogWheel(int value)
+   {
+      int amount = value > 64
+              ? (128 - value) * -1
+              : value;
+      _grid.HorizontalScroll(amount);
    }
 
    private boolean _shuttleSettled = true;

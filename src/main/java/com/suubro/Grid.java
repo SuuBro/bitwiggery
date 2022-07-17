@@ -9,8 +9,8 @@ import com.bitwig.extension.controller.api.NoteStep;
 import com.bitwig.extension.controller.api.PinnableCursorClip;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 class Key {
 
@@ -44,9 +44,11 @@ public class Grid
     public static final int PORT = 19762;
     public static final int HEIGHT = 8;
     public static final int WIDTH = 16;
+    public static final int VIRTUAL_HEIGHT = 128;
+    public static final int VIRTUAL_WIDTH = WIDTH * 256;
 
     private final ControllerHost _host;
-    private PinnableCursorClip _clip;
+    private final PinnableCursorClip _clip;
     private final OscConnection _oscOut;
 
     private final int[] _lastDownpressByRow = {-1, -1, -1, -1, -1, -1, -1, -1};
@@ -54,13 +56,14 @@ public class Grid
     private double _zoomLevel = 0.25;
     private int _earliestDisplayedNote = 0;
     private int _lowestDisplayedPitch = 60;
-    private Map<Key,NoteStep> _notes = new HashMap<>();
+    private final Map<Key,NoteStep> _notes = new HashMap<>();
 
     int[][] _ledDisplay = new int[WIDTH][HEIGHT];
 
     public Grid(ControllerHost host, PinnableCursorClip clip) {
         _host = host;
         _clip = clip;
+        _clip.setStepSize(_zoomLevel);
         OscModule osc = _host.getOscModule();
 
         try {
@@ -98,26 +101,37 @@ public class Grid
     public void Render()
     {
         Clear();
-        for (int x = 0; x < WIDTH; x++)
+        for (int y = 0; y < HEIGHT; y++)
         {
-            for (int y = 0; y < HEIGHT; y++)
+            final int pitch = y + _lowestDisplayedPitch;
+
+            List<NoteStep> notesAtPitch = _notes.values().stream()
+                    .filter(n -> n.velocity() > 0 && n.y() == pitch)
+                    .sorted(Comparator.comparingInt(NoteStep::x))
+                    .collect(Collectors.toList());
+
+            HashSet<Integer> seenPositions = new HashSet<>();
+            _host.println(" notesAtPitch size: " + notesAtPitch.size());
+
+            for (NoteStep note:notesAtPitch)
             {
-                Key key = new Key(x + _earliestDisplayedNote, y + _lowestDisplayedPitch);
-                boolean alreadyDisplayed = _ledDisplay[x][HEIGHT - y - 1] > 0;
-                if (!alreadyDisplayed && _notes.containsKey(key))
+                int start = Math.max(note.x() - _earliestDisplayedNote, 0);
+                int end = Math.min(note.x() + (int)(note.duration() / _zoomLevel) - _earliestDisplayedNote, WIDTH);
+                _host.println(" start: " + start + " end: " + end);
+                if(end <= 0 || start > WIDTH-1 || seenPositions.contains(start))
                 {
-                    NoteStep note = _notes.get(key);
-                    if (note.velocity() > 0)
-                    {
-                        int length = (int) (note.duration() / _zoomLevel);
-                        _ledDisplay[x][HEIGHT - y - 1] = 12;
-                        int lastIndexToUpdate = Math.min(x+length, WIDTH);
-                        for (int i = x+1; i < lastIndexToUpdate; i++)
-                        {
-                            _ledDisplay[i][HEIGHT - y - 1] = 6;
-                        }
-                    }
+                    continue;
                 }
+                _ledDisplay[start][HEIGHT - y - 1] = 12;
+                seenPositions.add(start);
+                for (int i = start+1; i < end; i++) {
+                    _ledDisplay[i][HEIGHT - y - 1] = 6;
+                    seenPositions.add(i);
+                }
+            }
+
+            for (int x = 0; x < WIDTH; x++)
+            {
                 if (_currentStep == _earliestDisplayedNote + x) {
                     _ledDisplay[x][HEIGHT - y - 1] += 3;
                 }
@@ -146,12 +160,10 @@ public class Grid
         int pitch = _lowestDisplayedPitch + HEIGHT - 1 - y;
         int lastDownPress = _lastDownpressByRow[y];
 
-        _host.println(" position: " + position + " pitch: " + pitch + " lastDownPress: " + lastDownPress);
 
         if(downPress && lastDownPress >= 0 && lastDownPress != x) {
             int start = _earliestDisplayedNote + Math.min(x, lastDownPress);
             int end = _earliestDisplayedNote + Math.max(x, lastDownPress);
-            _host.println(" start: " + start + " end: " + end);
             for (int i = start; i < end; i++)
             {
                 NoteStep existing = _notes.getOrDefault(new Key(i, pitch), null);
@@ -218,5 +230,13 @@ public class Grid
 
     private void handleUnknownMsg(OscConnection source, OscMessage message) {
         _host.println("Received unknown: " + message.getAddressPattern());
+    }
+
+    public void HorizontalScroll(int amount)
+    {
+        _earliestDisplayedNote += amount;
+        _earliestDisplayedNote = Math.min(Math.max(_earliestDisplayedNote, 0), VIRTUAL_WIDTH-WIDTH);
+        _host.println("Scroll " + amount + " to: " + _earliestDisplayedNote);
+        Render();
     }
 }
