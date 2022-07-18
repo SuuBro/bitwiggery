@@ -5,6 +5,7 @@ import com.bitwig.extension.api.opensoundcontrol.OscConnection;
 import com.bitwig.extension.api.opensoundcontrol.OscMessage;
 import com.bitwig.extension.api.opensoundcontrol.OscModule;
 import com.bitwig.extension.controller.api.ControllerHost;
+import com.bitwig.extension.controller.api.CursorTrack;
 import com.bitwig.extension.controller.api.NoteStep;
 import com.bitwig.extension.controller.api.PinnableCursorClip;
 
@@ -46,9 +47,12 @@ public class Grid
     public static final int WIDTH = 16;
     public static final int VIRTUAL_HEIGHT = 128;
     public static final int VIRTUAL_WIDTH = WIDTH * 256;
+    private static final String[] SCALES = new String[]{ "Chromatic", "Major", "Minor" };
+
 
     private final ControllerHost _host;
     private final PinnableCursorClip _clip;
+    private CursorTrack _cursorTrack;
     private final OscConnection _oscOut;
 
     private final int[] _lastDownpressByRow = {-1, -1, -1, -1, -1, -1, -1, -1};
@@ -56,14 +60,18 @@ public class Grid
     private double _zoomLevel = 0.25;
     private int _earliestDisplayedNote = 0;
     private int _lowestDisplayedPitch = 60;
+    private int _scaleIndex = 0;
+    private int _scaleRoot = 0;
+    private int _heldNotePitch = -1;
     private final Map<Key,NoteStep> _notes = new HashMap<>();
 
     int[][] _ledDisplay = new int[WIDTH][HEIGHT];
 
-    public Grid(ControllerHost host, PinnableCursorClip clip) {
+    public Grid(ControllerHost host, PinnableCursorClip clip, CursorTrack cursorTrack) {
         _host = host;
-
         _clip = clip;
+        _cursorTrack = cursorTrack;
+
         _clip.setStepSize(_zoomLevel);
         _clip.getLoopStart().addValueObserver(d -> Render());
         _clip.getLoopLength().addValueObserver(d -> Render());
@@ -104,12 +112,22 @@ public class Grid
         }
     }
 
+    public int yToPitch(int y)
+    {
+        return y + _lowestDisplayedPitch;
+    }
+
+    public int yToGridIndex(int y)
+    {
+        return HEIGHT - y - 1;
+    }
+
     public void Render()
     {
         Clear();
         for (int y = 0; y < HEIGHT; y++)
         {
-            final int pitch = y + _lowestDisplayedPitch;
+            final int pitch = yToPitch(y);
 
             List<NoteStep> notesAtPitch = _notes.values().stream()
                     .filter(n -> n.velocity() > 0 && n.y() == pitch)
@@ -139,9 +157,9 @@ public class Grid
                 int start = Math.max(actualStart, 0);
                 int end = Math.min(actualEnd, WIDTH);
 
-                _ledDisplay[start][HEIGHT - y - 1] = actualStart == start ? 12 : 6;
+                _ledDisplay[start][yToGridIndex(y)] = actualStart == start ? 12 : 6;
                 for (int i = 1; i < end-start; i++) {
-                    _ledDisplay[start+i][HEIGHT - y - 1] = 6;
+                    _ledDisplay[start+i][yToGridIndex(y)] = 6;
                 }
             }
 
@@ -150,18 +168,18 @@ public class Grid
 
             for (int x = 0; x < WIDTH; x++)
             {
-                int oldValue = _ledDisplay[x][HEIGHT - y - 1];
+                int oldValue = _ledDisplay[x][yToGridIndex(y)];
                 if (_currentStep == _earliestDisplayedNote + x)
                 {
-                    _ledDisplay[x][HEIGHT - y - 1] = oldValue + 3;
+                    _ledDisplay[x][yToGridIndex(y)] = oldValue + 3;
                 }
                 else if (_earliestDisplayedNote + x < loopStart)
                 {
-                    _ledDisplay[x][HEIGHT - y - 1] = oldValue == 0 ? 2 : oldValue;
+                    _ledDisplay[x][yToGridIndex(y)] = oldValue == 0 ? 2 : oldValue;
                 }
                 else if (_earliestDisplayedNote + x >= loopEnd)
                 {
-                    _ledDisplay[x][HEIGHT - y - 1] = oldValue == 0 ? 2 : oldValue;
+                    _ledDisplay[x][yToGridIndex(y)] = oldValue == 0 ? 2 : oldValue;
                 }
             }
         }
@@ -185,9 +203,22 @@ public class Grid
                 + " downPress: " + downPress);
 
         int position = x + _earliestDisplayedNote;
-        int pitch = _lowestDisplayedPitch + HEIGHT - 1 - y;
+        int pitch = yToPitch(yToGridIndex(y));
         int lastDownPress = _lastDownpressByRow[y];
 
+        if(downPress)
+        {
+            _heldNotePitch = pitch;
+        }
+        else
+        {
+            _heldNotePitch = -1;
+        }
+        if(downPress && x == WIDTH-1)
+        {
+            _cursorTrack.playNote(pitch, 127);
+            return;
+        }
 
         if(downPress && lastDownPress >= 0 && lastDownPress != x) {
             int start = _earliestDisplayedNote + Math.min(x, lastDownPress);
@@ -272,7 +303,16 @@ public class Grid
     {
         _lowestDisplayedPitch += amount;
         _lowestDisplayedPitch = Math.min(Math.max(_lowestDisplayedPitch, 0), VIRTUAL_HEIGHT-HEIGHT);
-        _host.showPopupNotification("Lowest Note: " + Scales.pitchToNoteName(_lowestDisplayedPitch));
+        _host.showPopupNotification("Lowest Note: " + Scales.PitchToNoteName(_lowestDisplayedPitch));
+        Render();
+    }
+
+    public void ChangeScale(int amount)
+    {
+        _scaleIndex += amount > 0 ? 1 : -1;
+        _scaleIndex = Math.max(Math.min(_scaleIndex, SCALES.length - 1), 0);
+        _host.showPopupNotification("Scale: " + Scales.IntervalToNoteName(_scaleRoot)
+                + " " + SCALES[_scaleIndex]);
         Render();
     }
 
@@ -290,5 +330,14 @@ public class Grid
         _clip.setStepSize(_zoomLevel);
         _host.showPopupNotification("Zoom level: " + _zoomLevel);
         Render();
+    }
+
+    public void ChangeScaleRoot()
+    {
+        if(_heldNotePitch > 0){
+            _scaleRoot = _heldNotePitch % 12;
+            _host.showPopupNotification("Scale: " + Scales.IntervalToNoteName(_scaleRoot)
+                    + " " + SCALES[_scaleIndex]);
+        }
     }
 }

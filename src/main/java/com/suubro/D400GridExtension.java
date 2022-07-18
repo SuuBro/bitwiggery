@@ -51,7 +51,7 @@ public class D400GridExtension extends ControllerExtension
 
       _clip.clipLauncherSlot().sceneIndex().markInterested();
 
-      _grid = new Grid(_host, _clip);
+      _grid = new Grid(_host, _clip, _cursorTrack);
 
       _transport = _host.createTransport();
       _hardwareSurface = _host.createHardwareSurface();
@@ -172,7 +172,7 @@ public class D400GridExtension extends ControllerExtension
    public void handleMidi (final int statusByte, final int data1, final int data2)
    {
       final ShortMidiMessage msg = new ShortMidiMessage (statusByte, data1, data2);
-      //_host.println(msg.toString());
+      _host.println(msg.toString());
 
       if(statusByte == Midi.NOTE_ON)
       {
@@ -203,6 +203,8 @@ public class D400GridExtension extends ControllerExtension
                case D400.BTN_ASSIGN1: _application.setPanelLayout(_application.PANEL_LAYOUT_ARRANGE); break;
                case D400.BTN_ASSIGN2: _application.setPanelLayout(_application.PANEL_LAYOUT_EDIT); break;
                case D400.JOG_WHEEL: _grid.HorizontalScroll(relative(data2)); break;
+               case D400.EQ_KNOB_1: _grid.ChangeScale(relative(data2)); break;
+               case D400.EQ_KNOB_BTN_1: _grid.ChangeScaleRoot(); break;
                case D400.EQ_KNOB_3: _grid.Zoom(relative(data2)); break;
                case D400.EQ_KNOB_4: _grid.VerticalScroll(relative(data2)); break;
             }

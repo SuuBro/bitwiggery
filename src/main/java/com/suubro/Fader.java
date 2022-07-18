@@ -34,7 +34,6 @@ public class Fader implements DoubleValueChangedCallback {
 
             if (_lastSentValue != faderValue)
             {
-                _host.println("Setting fader " + _channel + " to " + faderValue);
                 _midiOut.sendMidi(0xE0 | _channel, faderValue & 0x7f, faderValue >> 7);
                 _lastSentValue = faderValue;
             }
