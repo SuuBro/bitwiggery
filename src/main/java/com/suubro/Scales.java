@@ -1,11 +1,27 @@
 package com.suubro;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 public class Scales
 {
+    public static int[] GeneratePitches(int scaleRoot, String scale)
+    {
+        int[] intervals = ScaleIntervals.get(scale);
+        int lastNote = scaleRoot;
+        int intervalIndex = 0;
+        ArrayList<Integer> result = new ArrayList<>();
+        while (lastNote < 127)
+        {
+            result.add(lastNote);
+            lastNote += intervals[intervalIndex];
+            intervalIndex = (intervalIndex + 1) % intervals.length;
+        }
+        return result.stream().mapToInt(i -> i).toArray();
+    }
+
     public static String IntervalToNoteName(int interval)
     {
         return NoteNames.get(interval % 12);
@@ -16,29 +32,17 @@ public class Scales
         return IntervalToNoteName(pitch) + ((pitch / 12) - 2);
     }
 
-    public static int FindNoteAtInterval(String scale, int baseNote, int position)
-    {
-        int[] intervals = ScaleIntervals.get(scale);
-        int result = baseNote;
-        for (int i = 0; i < position; i++)
-        {
-            int interval = intervals[position % intervals.length];
-            result += interval;
-        }
-        return result;
-    }
-
     private static final Map<String, int[]> ScaleIntervals;
     static {
         Map<String, int[]> builder = new HashMap<>();
-        builder.put("chromatic", new int[] {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-        builder.put("blues", new int[] {3, 2, 1, 1, 3, 2});
-        builder.put("dorian", new int[] {2, 1, 2, 2, 2, 1, 2});
-        builder.put("major", new int[] {2, 2, 1, 2, 2, 2, 1});
-        builder.put("minor", new int[] {2, 1, 2, 2, 1, 2, 2});
-        builder.put("locrian", new int[] {1, 2, 2, 1, 2, 2, 2});
-        builder.put("mixolydian", new int[] {2, 2, 1, 2, 2, 1, 2});
-        builder.put("phrygian", new int[] {1, 2, 2, 2, 1, 2, 2});
+        builder.put("Chromatic", new int[] {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+        builder.put("Blues", new int[] {3, 2, 1, 1, 3, 2});
+        builder.put("Dorian", new int[] {2, 1, 2, 2, 2, 1, 2});
+        builder.put("Major", new int[] {2, 2, 1, 2, 2, 2, 1});
+        builder.put("Minor", new int[] {2, 1, 2, 2, 1, 2, 2});
+        builder.put("Locrian", new int[] {1, 2, 2, 1, 2, 2, 2});
+        builder.put("Mixolydian", new int[] {2, 2, 1, 2, 2, 1, 2});
+        builder.put("Phrygian", new int[] {1, 2, 2, 2, 1, 2, 2});
         ScaleIntervals = Collections.unmodifiableMap(builder);
     }
 

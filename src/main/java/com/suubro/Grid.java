@@ -12,6 +12,7 @@ import com.bitwig.extension.controller.api.PinnableCursorClip;
 import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 class Key {
 
@@ -49,7 +50,6 @@ public class Grid
     public static final int VIRTUAL_WIDTH = WIDTH * 256;
     private static final String[] SCALES = new String[]{ "Chromatic", "Major", "Minor" };
 
-
     private final ControllerHost _host;
     private final PinnableCursorClip _clip;
     private CursorTrack _cursorTrack;
@@ -59,9 +59,10 @@ public class Grid
     private int _currentStep = -1;
     private double _zoomLevel = 0.25;
     private int _earliestDisplayedNote = 0;
-    private int _lowestDisplayedPitch = 60;
+    private int _lowestDisplayedPitchIndex = 60;
     private int _scaleIndex = 0;
     private int _scaleRoot = 0;
+    private int[] _availablePitches = IntStream.range(0, 127).toArray();;
     private int _heldNotePitch = -1;
     private final Map<Key,NoteStep> _notes = new HashMap<>();
 
@@ -114,7 +115,7 @@ public class Grid
 
     public int yToPitch(int y)
     {
-        return y + _lowestDisplayedPitch;
+        return _availablePitches[y + _lowestDisplayedPitchIndex];
     }
 
     public int yToGridIndex(int y)
@@ -301,9 +302,9 @@ public class Grid
 
     public void VerticalScroll(int amount)
     {
-        _lowestDisplayedPitch += amount;
-        _lowestDisplayedPitch = Math.min(Math.max(_lowestDisplayedPitch, 0), VIRTUAL_HEIGHT-HEIGHT);
-        _host.showPopupNotification("Lowest Note: " + Scales.PitchToNoteName(_lowestDisplayedPitch));
+        _lowestDisplayedPitchIndex += amount;
+        _lowestDisplayedPitchIndex = Math.min(Math.max(_lowestDisplayedPitchIndex, 0), VIRTUAL_HEIGHT-HEIGHT);
+        _host.showPopupNotification("Lowest Note: " + Scales.PitchToNoteName(_lowestDisplayedPitchIndex));
         Render();
     }
 
@@ -313,6 +314,7 @@ public class Grid
         _scaleIndex = Math.max(Math.min(_scaleIndex, SCALES.length - 1), 0);
         _host.showPopupNotification("Scale: " + Scales.IntervalToNoteName(_scaleRoot)
                 + " " + SCALES[_scaleIndex]);
+        UpdateAvailablePitches();
         Render();
     }
 
@@ -339,5 +341,36 @@ public class Grid
             _host.showPopupNotification("Scale: " + Scales.IntervalToNoteName(_scaleRoot)
                     + " " + SCALES[_scaleIndex]);
         }
+        UpdateAvailablePitches();
+        Render();
+    }
+
+    private void UpdateAvailablePitches()
+    {
+        int trackingNote = _heldNotePitch > 0 ? _heldNotePitch : yToPitch(4);
+        int originalPosition = ClosestIndex(trackingNote, _availablePitches) - _lowestDisplayedPitchIndex;
+
+        _availablePitches = Scales.GeneratePitches(_scaleRoot, SCALES[_scaleIndex]);
+
+        // re-position the view so that changing scale is less disorienting
+        int newPosition = ClosestIndex(trackingNote, _availablePitches) - _lowestDisplayedPitchIndex;
+        int diff = originalPosition - newPosition;
+        _lowestDisplayedPitchIndex -= diff;
+    }
+
+    private static int ClosestIndex(int target, int[] values)
+    {
+        int min = Integer.MAX_VALUE;
+        int closest = -1;
+
+        for (int i = 0; i < values.length; i++) {
+            final int diff = Math.abs(values[i] - target);
+            if (diff < min) {
+                min = diff;
+                closest = i;
+            }
+        }
+
+        return closest;
     }
 }
