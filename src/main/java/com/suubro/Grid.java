@@ -303,8 +303,8 @@ public class Grid
     public void VerticalScroll(int amount)
     {
         _lowestDisplayedPitchIndex += amount;
-        _lowestDisplayedPitchIndex = Math.min(Math.max(_lowestDisplayedPitchIndex, 0), VIRTUAL_HEIGHT-HEIGHT);
-        _host.showPopupNotification("Lowest Note: " + Scales.PitchToNoteName(_lowestDisplayedPitchIndex));
+        _lowestDisplayedPitchIndex = Math.min(Math.max(_lowestDisplayedPitchIndex, 0), _availablePitches.length);
+        _host.showPopupNotification("Lowest Note: " + Scales.PitchToNoteName(_availablePitches[_lowestDisplayedPitchIndex]));
         Render();
     }
 

@@ -74,7 +74,10 @@ public class D400GridExtension extends ControllerExtension
 
       for (int i = 0; i < _deviceBank.getSizeOfBank(); i++) {
          _parameterBanks[i] = _deviceBank.getDevice(i).createCursorRemoteControlsPage(8);
-         for (int p = 0; p < NUM_PARAMS_IN_PAGE; p++) {
+         for (int p = 0; p < NUM_PARAMS_IN_PAGE; p++)
+         {
+            _parameterBanks[i].getParameter(p).name().markInterested();
+            _parameterBanks[i].getParameter(p).displayedValue().markInterested();
             _parameterBanks[i].getParameter(p).name().addValueObserver(this::buildDisplay);
             _parameterBanks[i].getParameter(p).displayedValue().addValueObserver(this::buildDisplay);
          }
@@ -96,8 +99,9 @@ public class D400GridExtension extends ControllerExtension
 
          track.addVuMeterObserver(14, -1, true, level -> {
             long now = Instant.now().toEpochMilli();
-            if (_vuMeterLastSend[channel] < now - 250) {
+            if (_vuMeterLastSend[channel] < now - 300) {
                _midiOut.sendMidi(Midi.CHANNEL_PRESSURE, level + (channel << 4), 0);
+               _midiOut.sendMidi(Midi.CHANNEL_PRESSURE, level + (channel << 4) +1, 0);
                _vuMeterLastSend[channel] = now;
             }
          });
