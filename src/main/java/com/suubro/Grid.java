@@ -138,9 +138,9 @@ public class Grid
             HashSet<Integer> seenNotes = new HashSet<>();
             for (NoteStep note:notesAtPitch)
             {
-                 _host.println("Note x: " + note.x()
-                         + " y: " + note.y()
-                         + " duration: " + note.duration());
+                 // _host.println("Note x: " + note.x()
+                 //         + " y: " + note.y()
+                 //         + " duration: " + note.duration());
 
                 if(seenNotes.contains(note.x()))
                 {

@@ -276,13 +276,7 @@ public class D400GridExtension extends ControllerExtension
    private void selectTrack(int i)
    {
       clearFx();
-      if(_selectedTrack == i) // Leave device mode by clicking the already selected track
-      {
-         _selectedTrack = -1;
-         _deviceMode = false;
-         buildDisplay();
-         return;
-      }
+      boolean toggleDeviceMode = _selectedTrack == i;
 
       for (int t = 0; t < _trackBank.getSizeOfBank(); t++) {
          Track track = _trackBank.getItemAt(t);
@@ -299,7 +293,16 @@ public class D400GridExtension extends ControllerExtension
          _midiOut.sendMidi(Midi.NOTE_ON, D400.BTN_SELECT_1+t, t == i ? 127 : 0);
          faders[t].setBinding(track.volume());
       }
-      selectFx(0);
+
+      if(toggleDeviceMode)
+      {
+         _deviceMode = !_deviceMode;
+      }
+      else
+      {
+         selectFx(0);
+      }
+
       buildDisplay();
    }
 
@@ -347,7 +350,7 @@ public class D400GridExtension extends ControllerExtension
    {
       StringBuilder line0 = new StringBuilder();
       StringBuilder line1 = new StringBuilder();
-      if(_deviceMode)
+      if(_deviceMode && _selectedDevice >= 0)
       {
          for (int t = 0; t < NUM_PARAMS_IN_PAGE; t++)
          {
