@@ -32,6 +32,7 @@ public class D400GridExtension extends ControllerExtension
    private final Timer displayUpdateTimer = new Timer();
 
    private boolean _deviceMode = false;
+   private int _selectedTrack = -1;
    private int _selectedDevice = -1;
 
    protected D400GridExtension(final D400GridExtensionDefinition definition, final ControllerHost host)
@@ -275,6 +276,13 @@ public class D400GridExtension extends ControllerExtension
    private void selectTrack(int i)
    {
       clearFx();
+      if(_selectedTrack == i) // Leave device mode by clicking the already selected track
+      {
+         _selectedTrack = -1;
+         _deviceMode = false;
+         buildDisplay();
+         return;
+      }
 
       for (int t = 0; t < _trackBank.getSizeOfBank(); t++) {
          Track track = _trackBank.getItemAt(t);
@@ -286,12 +294,12 @@ public class D400GridExtension extends ControllerExtension
             _clip.selectClip(_clip);
             _clip.clipLauncherSlot().select();
             _clip.clipLauncherSlot().showInEditor();
+            _selectedTrack = i;
          }
          _midiOut.sendMidi(Midi.NOTE_ON, D400.BTN_SELECT_1+t, t == i ? 127 : 0);
          faders[t].setBinding(track.volume());
       }
-      _selectedDevice = -1;
-      _deviceMode = false;
+      selectFx(0);
       buildDisplay();
    }
 
@@ -312,6 +320,7 @@ public class D400GridExtension extends ControllerExtension
          }
          _midiOut.sendMidi(Midi.NOTE_ON, D400.BUTTON_1+f, f == exceptThisChannel ? 127 : 0);
       }
+      _selectedDevice = -1;
    }
 
    private void selectFx(int i)
