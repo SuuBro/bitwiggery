@@ -217,7 +217,12 @@ public class Grid
         }
         if(downPress && x == WIDTH-1)
         {
-            _cursorTrack.playNote(pitch, 127);
+            _cursorTrack.startNote(pitch, 127);
+            return;
+        }
+        if(!downPress && x == WIDTH-1)
+        {
+            _cursorTrack.stopNote(pitch, 0);
             return;
         }
 
