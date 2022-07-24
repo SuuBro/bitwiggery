@@ -5,6 +5,8 @@ import com.bitwig.extension.controller.ControllerExtension;
 import com.bitwig.extension.controller.api.*;
 
 import java.time.Instant;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.function.BooleanSupplier;
 
 public class D400GridExtension extends ControllerExtension
@@ -22,12 +24,12 @@ public class D400GridExtension extends ControllerExtension
    private CursorTrack _cursorTrack;
    private PinnableCursorClip _clip;
    private DeviceBank _deviceBank;
-   private SceneBank _sceneBank;
    private final CursorRemoteControlsPage[] _parameterBanks = new CursorRemoteControlsPage[8];
    private Application _application;
 
    private final Fader[] faders = new Fader[8];
    private final long[] _vuMeterLastSend = new long[8];
+   private final Timer displayUpdateTimer = new Timer();
 
    private boolean _deviceMode = false;
    private int _selectedDevice = -1;
@@ -70,41 +72,44 @@ public class D400GridExtension extends ControllerExtension
       _trackBank = _host.createMainTrackBank(8, 0, 0);
       _trackBank.followCursorTrack(_cursorTrack);
       _deviceBank = _cursorTrack.createDeviceBank(8);
-      _sceneBank = _host.createSceneBank(8);
 
       for (int i = 0; i < _deviceBank.getSizeOfBank(); i++) {
          _parameterBanks[i] = _deviceBank.getDevice(i).createCursorRemoteControlsPage(8);
          for (int p = 0; p < NUM_PARAMS_IN_PAGE; p++)
          {
-            _parameterBanks[i].getParameter(p).name().addValueObserver(this::buildDisplay);
-            _parameterBanks[i].getParameter(p).value().addValueObserver(this::buildDisplay);
-            _parameterBanks[i].getParameter(p).displayedValue().addValueObserver(this::buildDisplay);
+            _parameterBanks[i].getParameter(p).name().markInterested();
+            _parameterBanks[i].getParameter(p).value().markInterested();
+            _parameterBanks[i].getParameter(p).displayedValue().markInterested();
          }
       }
 
       for (int i = 0; i < _trackBank.getSizeOfBank(); i++) {
          final int channel = i;
          final Track track = _trackBank.getItemAt(i);
-         track.volume().markInterested();
          track.name().markInterested();
+         track.volume().markInterested();
+         track.volume().displayedValue().markInterested();
 
          Fader fader = setUpFader(channel);
          fader.setBinding(_trackBank.getItemAt(channel).volume());
-
-         track.name().addValueObserver(this::buildDisplay);
-         track.volume().displayedValue().addValueObserver(this::buildDisplay);
 
          _vuMeterLastSend[channel] = Instant.now().toEpochMilli();
 
          track.addVuMeterObserver(14, -1, true, level -> {
             long now = Instant.now().toEpochMilli();
-            if (_vuMeterLastSend[channel] < now - 300) {
+            if (_vuMeterLastSend[channel] < now - 120) {
                _midiOut.sendMidi(Midi.CHANNEL_PRESSURE, level + (channel << 4), 0);
-               _midiOut.sendMidi(Midi.CHANNEL_PRESSURE, level + (channel << 4) +1, 0);
                _vuMeterLastSend[channel] = now;
             }
          });
       }
+
+      displayUpdateTimer.scheduleAtFixedRate(new TimerTask() {
+         @Override
+         public void run() {
+            buildDisplay();
+         }
+      }, 0, 100);
 
       _host.showPopupNotification("D400Grid Initialized");
    }
@@ -287,7 +292,7 @@ public class D400GridExtension extends ControllerExtension
       }
       _selectedDevice = -1;
       _deviceMode = false;
-      buildDisplay("");
+      buildDisplay();
    }
 
    private void clearFx()
@@ -325,11 +330,11 @@ public class D400GridExtension extends ControllerExtension
       }
       _selectedDevice = i;
       _deviceMode = true;
-      buildDisplay("");
+      buildDisplay();
    }
 
    String _displayCache = null;
-   private void buildDisplay(Object unused)
+   private void buildDisplay()
    {
       StringBuilder line0 = new StringBuilder();
       StringBuilder line1 = new StringBuilder();
