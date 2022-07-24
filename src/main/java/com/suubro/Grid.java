@@ -52,7 +52,7 @@ public class Grid
 
     private final ControllerHost _host;
     private final PinnableCursorClip _clip;
-    private CursorTrack _cursorTrack;
+    private final CursorTrack _cursorTrack;
     private final OscConnection _oscOut;
 
     private final int[] _lastDownpressByRow = {-1, -1, -1, -1, -1, -1, -1, -1};
@@ -62,7 +62,7 @@ public class Grid
     private int _lowestDisplayedPitchIndex = 60;
     private int _scaleIndex = 0;
     private int _scaleRoot = 0;
-    private int[] _availablePitches = IntStream.range(0, 127).toArray();;
+    private int[] _availablePitches = IntStream.range(0, 127).toArray();
     private int _heldNotePitch = -1;
     private final Map<Key,NoteStep> _notes = new HashMap<>();
 
@@ -138,6 +138,10 @@ public class Grid
             HashSet<Integer> seenNotes = new HashSet<>();
             for (NoteStep note:notesAtPitch)
             {
+                 _host.println("Note x: " + note.x()
+                         + " y: " + note.y()
+                         + " duration: " + note.duration());
+
                 if(seenNotes.contains(note.x()))
                 {
                     continue;
@@ -145,7 +149,7 @@ public class Grid
                 seenNotes.add(note.x());
 
                 int actualStart = note.x() - _earliestDisplayedNote;
-                int actualEnd = note.x() + (int)(note.duration() / _zoomLevel) - _earliestDisplayedNote;
+                int actualEnd = (int) Math.ceil(note.x() + (note.duration() / _zoomLevel) - _earliestDisplayedNote);
 
                 for (int i = 1; i < actualEnd-actualStart; i++) {
                     seenNotes.add(note.x()+i);
@@ -198,10 +202,10 @@ public class Grid
         int y = msg.getInt(1);
         boolean downPress = msg.getInt(2) > 0;
 
-        _host.println(msg.getAddressPattern()
-                + " x: " + x
-                + " y: " + y
-                + " downPress: " + downPress);
+         // _host.println(msg.getAddressPattern()
+         //         + " x: " + x
+         //         + " y: " + y
+         //         + " downPress: " + downPress);
 
         int position = x + _earliestDisplayedNote;
         int pitch = yToPitch(yToGridIndex(y));
@@ -238,7 +242,7 @@ public class Grid
                 }
             }
             double duration = (end + 1 - start) * _zoomLevel;
-            _clip.setStep(start, pitch, 127, duration);
+            addNoteStep(pitch, start, duration);
             _lastDownpressByRow[y] = -1;
         }
         else if (!downPress && lastDownPress >= 0)
@@ -252,7 +256,7 @@ public class Grid
                 }
                 else
                 {
-                    _clip.setStep(position, pitch, 127, 1 * _zoomLevel);
+                    addNoteStep(pitch, position, _zoomLevel);
                 }
             }
             _lastDownpressByRow[y] = -1;
@@ -261,6 +265,11 @@ public class Grid
         {
             _lastDownpressByRow[y] = x;
         }
+    }
+
+    private void addNoteStep(int pitch, int start, double duration)
+    {
+        _clip.setStep(start, pitch, 127, duration - 0.001);
     }
 
     private void SetUpOsc(OscModule osc, int listenPort) throws IOException

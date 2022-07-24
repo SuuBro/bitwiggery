@@ -76,9 +76,8 @@ public class D400GridExtension extends ControllerExtension
          _parameterBanks[i] = _deviceBank.getDevice(i).createCursorRemoteControlsPage(8);
          for (int p = 0; p < NUM_PARAMS_IN_PAGE; p++)
          {
-            _parameterBanks[i].getParameter(p).name().markInterested();
-            _parameterBanks[i].getParameter(p).displayedValue().markInterested();
             _parameterBanks[i].getParameter(p).name().addValueObserver(this::buildDisplay);
+            _parameterBanks[i].getParameter(p).value().addValueObserver(this::buildDisplay);
             _parameterBanks[i].getParameter(p).displayedValue().addValueObserver(this::buildDisplay);
          }
       }
@@ -329,7 +328,9 @@ public class D400GridExtension extends ControllerExtension
       buildDisplay("");
    }
 
-   private void buildDisplay(Object unused) {
+   String _displayCache = null;
+   private void buildDisplay(Object unused)
+   {
       StringBuilder line0 = new StringBuilder();
       StringBuilder line1 = new StringBuilder();
       if(_deviceMode)
@@ -338,7 +339,7 @@ public class D400GridExtension extends ControllerExtension
          {
             Parameter parameter = _parameterBanks[_selectedDevice].getParameter(t);
             AddDisplayText(line0, parameter.name().get());
-            AddDisplayText(line1, parameter.displayedValue().get());
+            AddDisplayText(line1, parameter.displayedValue().getLimited(8));
          }
       }
       else {
@@ -348,10 +349,16 @@ public class D400GridExtension extends ControllerExtension
             AddDisplayText(line1, track.volume().displayedValue().get());
          }
       }
-      _midiOut.sendSysex(Midi.SYSEX_HDR + "18" + "00"
+      final String updateMessage = Midi.SYSEX_HDR + "18" + "00"
               + stringToHex(line0.toString())
               + stringToHex(line1.toString())
-              + Midi.SYSEX_END);
+              + Midi.SYSEX_END;
+
+      if(!updateMessage.equals(_displayCache))
+      {
+         _midiOut.sendSysex(updateMessage);
+         _displayCache = updateMessage;
+      }
    }
 
    private void AddDisplayText(StringBuilder line, String text) {
