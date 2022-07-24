@@ -47,16 +47,18 @@ public class D400GridExtension extends ControllerExtension
 
       _midiIn = _host.getMidiInPort(0);
       _midiIn.setMidiCallback(this::handleMidi);
+      NoteInput noteInput = _midiIn.createNoteInput("Grid Note Input", "00000");
       _midiOut = _host.getMidiOutPort(0);
 
       _cursorTrack = _host.createCursorTrack("D400_CURSOR_TRACK", "Cursor Track", 0, 0, true);
       _clip = _cursorTrack.createLauncherCursorClip(Grid.VIRTUAL_WIDTH, Grid.VIRTUAL_HEIGHT);
 
       _clip.clipLauncherSlot().sceneIndex().markInterested();
-
-      _grid = new Grid(_host, _clip, _cursorTrack);
-
       _transport = _host.createTransport();
+
+      _grid = new Grid(_host, _clip, noteInput, _transport);
+
+
       _hardwareSurface = _host.createHardwareSurface();
 
       createButtonWithLight("PLAY", D400.BTN_PLAY,
@@ -64,7 +66,7 @@ public class D400GridExtension extends ControllerExtension
       createButtonWithLight("STOP", D400.BTN_STOP,
               _transport.stopAction(), _transport.isPlaying(), () -> !_transport.isPlaying().get());
       createButtonWithLight("RECORD", D400.BTN_REC,
-              _transport.recordAction(), _transport.isArrangerRecordEnabled());
+              _transport.isClipLauncherOverdubEnabled().toggleAction(), _transport.isClipLauncherOverdubEnabled());
       createButtonWithLight("LOOP", D400.BTN_LOOP,
               _transport.isArrangerLoopEnabled().toggleAction(), _transport.isArrangerLoopEnabled());
       createButtonWithLight("METRONOME", D400.BTN_METRONOME,
@@ -176,6 +178,7 @@ public class D400GridExtension extends ControllerExtension
    public void flush()
    {
       _hardwareSurface.updateHardware();
+      _grid.Render();
    }
 
    public void handleMidi (final int statusByte, final int data1, final int data2)

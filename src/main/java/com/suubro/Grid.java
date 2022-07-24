@@ -4,20 +4,18 @@ import com.bitwig.extension.api.opensoundcontrol.OscAddressSpace;
 import com.bitwig.extension.api.opensoundcontrol.OscConnection;
 import com.bitwig.extension.api.opensoundcontrol.OscMessage;
 import com.bitwig.extension.api.opensoundcontrol.OscModule;
-import com.bitwig.extension.controller.api.ControllerHost;
-import com.bitwig.extension.controller.api.CursorTrack;
-import com.bitwig.extension.controller.api.NoteStep;
-import com.bitwig.extension.controller.api.PinnableCursorClip;
+import com.bitwig.extension.controller.api.*;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 class Key {
 
-    private final int x;
-    private final int y;
+    public final int x;
+    public final int y;
 
     public Key(int x, int y) {
         this.x = x;
@@ -49,10 +47,12 @@ public class Grid
     public static final int VIRTUAL_HEIGHT = 128;
     public static final int VIRTUAL_WIDTH = WIDTH * 256;
     private static final String[] SCALES = new String[]{ "Chromatic", "Major", "Minor" };
+    private static final double RETRIGGER_GAP = 0.001;
 
     private final ControllerHost _host;
     private final PinnableCursorClip _clip;
-    private final CursorTrack _cursorTrack;
+    private final NoteInput _noteInput;
+    private final Transport _transport;
     private final OscConnection _oscOut;
 
     private final int[] _lastDownpressByRow = {-1, -1, -1, -1, -1, -1, -1, -1};
@@ -65,19 +65,24 @@ public class Grid
     private int[] _availablePitches = IntStream.range(0, 127).toArray();
     private int _heldNotePitch = -1;
     private final Map<Key,NoteStep> _notes = new HashMap<>();
+    private final Map<Key,Integer> _noteStarts = new HashMap<>();
 
     int[][] _ledDisplay = new int[WIDTH][HEIGHT];
 
-    public Grid(ControllerHost host, PinnableCursorClip clip, CursorTrack cursorTrack) {
+    public Grid(ControllerHost host, PinnableCursorClip clip, NoteInput noteInput, Transport transport) {
         _host = host;
         _clip = clip;
-        _cursorTrack = cursorTrack;
+        _noteInput = noteInput;
+        _transport = transport;
+
+        _transport.isClipLauncherOverdubEnabled().markInterested();
 
         _clip.setStepSize(_zoomLevel);
         _clip.getLoopStart().addValueObserver(d -> Render());
         _clip.getLoopLength().addValueObserver(d -> Render());
         _clip.playingStep().addValueObserver(this::UpdatePlayingStep);
         _clip.addNoteStepObserver(this::OnStepChange);
+        _clip.addStepDataObserver(this::OnStepData);
 
         OscModule osc = _host.getOscModule();
 
@@ -123,49 +128,39 @@ public class Grid
         return HEIGHT - y - 1;
     }
 
+    private long lastRender = 0;
     public void Render()
     {
+        boolean isRecording = _transport.isClipLauncherOverdubEnabled().get();
+        long now = Instant.now().toEpochMilli();
+        if(isRecording && lastRender > now - 60)
+        {
+            return; // Don't render too often while recording, missed MIDI notes
+        }
+        lastRender = now;
+
         Clear();
         for (int y = 0; y < HEIGHT; y++)
         {
             final int pitch = yToPitch(y);
 
-            List<NoteStep> notesAtPitch = _notes.values().stream()
-                    .filter(n -> n.velocity() > 0 && n.y() == pitch)
-                    .sorted(Comparator.comparingInt(NoteStep::x))
+            List<Map.Entry<Key,Integer>> notesAtPitch = _noteStarts.entrySet().stream()
+                    .filter(n -> n.getValue() > 0 && n.getKey().y == pitch)
+                    .sorted(Comparator.comparingInt(value -> value.getKey().x))
                     .collect(Collectors.toList());
 
-            HashSet<Integer> seenNotes = new HashSet<>();
-            for (NoteStep note:notesAtPitch)
+            for (Map.Entry<Key,Integer> note:notesAtPitch)
             {
-                 // _host.println("Note x: " + note.x()
-                 //         + " y: " + note.y()
-                 //         + " duration: " + note.duration());
+                _host.println("Note x: " + note.getKey().x
+                                 + " y: " + note.getKey().y
+                                 + " val: " + note.getValue());
 
-                if(seenNotes.contains(note.x()))
-                {
-                    continue;
-                }
-                seenNotes.add(note.x());
-
-                int actualStart = note.x() - _earliestDisplayedNote;
-                int actualEnd = (int) Math.ceil(note.x() + (note.duration() / _zoomLevel) - _earliestDisplayedNote);
-
-                for (int i = 1; i < actualEnd-actualStart; i++) {
-                    seenNotes.add(note.x()+i);
-                }
-
-                if(actualEnd <= 0 || actualStart >= WIDTH)
+                int x = note.getKey().x - _earliestDisplayedNote;
+                if(x < 0 || x >= WIDTH)
                 {
                     continue; // Nothing to display
                 }
-                int start = Math.max(actualStart, 0);
-                int end = Math.min(actualEnd, WIDTH);
-
-                _ledDisplay[start][yToGridIndex(y)] = actualStart == start ? 12 : 6;
-                for (int i = 1; i < end-start; i++) {
-                    _ledDisplay[start+i][yToGridIndex(y)] = 6;
-                }
+                _ledDisplay[x][yToGridIndex(y)] = (note.getValue() == 1) ? 6 : 12;
             }
 
             double loopStart = _clip.getLoopStart().get() / _zoomLevel;
@@ -197,15 +192,21 @@ public class Grid
         Render();
     }
 
+    private void OnStepData(int x, int y, int t)
+    {
+        _noteStarts.put(new Key(x, y), t);
+        Render();
+    }
+
     private void onKey(OscConnection s, OscMessage msg) {
         int x = msg.getInt(0);
         int y = msg.getInt(1);
         boolean downPress = msg.getInt(2) > 0;
 
-         // _host.println(msg.getAddressPattern()
-         //         + " x: " + x
-         //         + " y: " + y
-         //         + " downPress: " + downPress);
+         _host.println(msg.getAddressPattern()
+                  + " x: " + x
+                  + " y: " + y
+                  + " downPress: " + downPress);
 
         int position = x + _earliestDisplayedNote;
         int pitch = yToPitch(yToGridIndex(y));
@@ -219,14 +220,12 @@ public class Grid
         {
             _heldNotePitch = -1;
         }
-        if(downPress && x == WIDTH-1)
+        if(x == WIDTH-1)
         {
-            _cursorTrack.startNote(pitch, 127);
-            return;
-        }
-        if(!downPress && x == WIDTH-1)
-        {
-            _cursorTrack.stopNote(pitch, 0);
+            _host.println((downPress ? "NOTE ON: " : "NOTE OFF: ")
+                    + " pitch: " + pitch
+                    + " velocity: " + 64);
+            _noteInput.sendRawMidiEvent(downPress ? Midi.NOTE_ON : Midi.NOTE_OFF, pitch, 64);
             return;
         }
 
@@ -269,7 +268,7 @@ public class Grid
 
     private void addNoteStep(int pitch, int start, double duration)
     {
-        _clip.setStep(start, pitch, 127, duration - 0.001);
+        _clip.setStep(start, pitch, 64, duration - RETRIGGER_GAP);
     }
 
     private void SetUpOsc(OscModule osc, int listenPort) throws IOException
