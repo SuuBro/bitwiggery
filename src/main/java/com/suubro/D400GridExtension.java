@@ -34,6 +34,7 @@ public class D400GridExtension extends ControllerExtension
    private boolean _deviceMode = false;
    private int _selectedTrack = -1;
    private int _selectedDevice = -1;
+   private boolean _shift = false;
 
    protected D400GridExtension(final D400GridExtensionDefinition definition, final ControllerHost host)
    {
@@ -58,19 +59,15 @@ public class D400GridExtension extends ControllerExtension
 
       _grid = new Grid(_host, _clip, noteInput, _transport);
 
-
       _hardwareSurface = _host.createHardwareSurface();
 
-      createButtonWithLight("PLAY", D400.BTN_PLAY,
-              _transport.playAction(), _transport.isPlaying());
-      createButtonWithLight("STOP", D400.BTN_STOP,
-              _transport.stopAction(), _transport.isPlaying(), () -> !_transport.isPlaying().get());
-      createButtonWithLight("RECORD", D400.BTN_REC,
-              _transport.isClipLauncherOverdubEnabled().toggleAction(), _transport.isClipLauncherOverdubEnabled());
-      createButtonWithLight("LOOP", D400.BTN_LOOP,
-              _transport.isArrangerLoopEnabled().toggleAction(), _transport.isArrangerLoopEnabled());
-      createButtonWithLight("METRONOME", D400.BTN_METRONOME,
-              _transport.isMetronomeEnabled().toggleAction(), _transport.isMetronomeEnabled());
+      createButtonWithLight("PLAY", D400.BTN_PLAY, _transport.playAction(), _transport.isPlaying());
+      createButtonWithLight("STOP", D400.BTN_STOP, _transport.stopAction(), _transport.isPlaying(),
+              () -> !_transport.isPlaying().get());
+
+      createButtonWithLight("RECORD", D400.BTN_REC, _transport.isClipLauncherOverdubEnabled());
+      createButtonWithLight("LOOP", D400.BTN_LOOP, _transport.isArrangerLoopEnabled());
+      createButtonWithLight("METRONOME", D400.BTN_METRONOME, _transport.isMetronomeEnabled());
 
       _trackBank = _host.createMainTrackBank(8, 0, 0);
       _trackBank.followCursorTrack(_cursorTrack);
@@ -93,9 +90,10 @@ public class D400GridExtension extends ControllerExtension
          track.volume().markInterested();
          track.volume().displayedValue().markInterested();
 
-         Fader fader = new Fader(_host, _midiIn, _midiOut, channel, _hardwareSurface);
-         _faders[channel] = fader;
-         fader.setBinding(_trackBank.getItemAt(channel).volume());
+         _faders[channel] = new Fader(_host, _midiIn, _midiOut, channel, _hardwareSurface);
+         _faders[channel].setBinding(_trackBank.getItemAt(channel).volume());
+         createButtonWithLight("MUTE" + i, D400.BTN_MUTE_1+i, track.mute());
+         createButtonWithLight("SOLO" + i, D400.BTN_RECORD_1+i, track.solo());
 
          _vuMeterLastSend[channel] = Instant.now().toEpochMilli();
 
@@ -132,6 +130,11 @@ public class D400GridExtension extends ControllerExtension
                                      SettableBooleanValue value)
    {
       createButtonWithLight(name, midi, binding, value, value::get);
+   }
+
+   public void createButtonWithLight(final String name, final int midi, SettableBooleanValue value)
+   {
+      createButtonWithLight(name, midi, value.toggleAction(), value, value::get);
    }
 
    public void createButtonWithLight(final String name, final int midi, HardwareBindable binding,
@@ -171,6 +174,10 @@ public class D400GridExtension extends ControllerExtension
          {
             handleShuttle(data2);
          }
+         if (data1 == D400.BTN_SHIFT)
+         {
+            _shift = data2 > 0;
+         }
          else if(data2 > 0)
          {
             switch (data1)
@@ -183,6 +190,22 @@ public class D400GridExtension extends ControllerExtension
                case D400.BTN_SELECT_6: selectTrack(5); break;
                case D400.BTN_SELECT_7: selectTrack(6); break;
                case D400.BTN_SELECT_8: selectTrack(7); break;
+               case D400.BTN_MUTE_1: muteTrack(0); break;
+               case D400.BTN_MUTE_2: muteTrack(1); break;
+               case D400.BTN_MUTE_3: muteTrack(2); break;
+               case D400.BTN_MUTE_4: muteTrack(3); break;
+               case D400.BTN_MUTE_5: muteTrack(4); break;
+               case D400.BTN_MUTE_6: muteTrack(5); break;
+               case D400.BTN_MUTE_7: muteTrack(6); break;
+               case D400.BTN_MUTE_8: muteTrack(7); break;
+               case D400.BTN_RECORD_1: soloTrack(0); break;
+               case D400.BTN_RECORD_2: soloTrack(1); break;
+               case D400.BTN_RECORD_3: soloTrack(2); break;
+               case D400.BTN_RECORD_4: soloTrack(3); break;
+               case D400.BTN_RECORD_5: soloTrack(4); break;
+               case D400.BTN_RECORD_6: soloTrack(5); break;
+               case D400.BTN_RECORD_7: soloTrack(6); break;
+               case D400.BTN_RECORD_8: soloTrack(7); break;
                case D400.BUTTON_1: selectFx(0); break;
                case D400.BUTTON_2: selectFx(1); break;
                case D400.BUTTON_3: selectFx(2); break;
@@ -191,8 +214,8 @@ public class D400GridExtension extends ControllerExtension
                case D400.BUTTON_6: selectFx(5); break;
                case D400.BUTTON_7: selectFx(6); break;
                case D400.BUTTON_8: selectFx(7); break;
-               case D400.BTN_ASSIGN1: _application.setPanelLayout(_application.PANEL_LAYOUT_ARRANGE); break;
-               case D400.BTN_ASSIGN2: _application.setPanelLayout(_application.PANEL_LAYOUT_EDIT); break;
+               case D400.BTN_ASSIGN1: changeView(1); break;
+               case D400.BTN_ASSIGN2: changeView(2); break;
                case D400.JOG_WHEEL: _grid.HorizontalScroll(relative(data2)); break;
                case D400.EQ_KNOB_1: _grid.ChangeScale(relative(data2)); break;
                case D400.EQ_KNOB_BTN_1: _grid.ChangeScaleRoot(); break;
@@ -201,6 +224,39 @@ public class D400GridExtension extends ControllerExtension
             }
          }
       }
+   }
+
+   private void changeView(int view)
+   {
+      if(_shift)
+      {
+         if(view == 1)
+         {
+            _application.toggleNoteEditor();
+         }
+         else if(view == 2)
+         {
+            _application.toggleDevices();
+         }
+      }
+      else
+      {
+         _application.setPanelLayout(view == 1
+                 ? _application.PANEL_LAYOUT_ARRANGE
+                 : _application.PANEL_LAYOUT_EDIT);
+      }
+   }
+
+   private void muteTrack(int i)
+   {
+      _trackBank.getItemAt(i).mute().toggle();
+      _midiOut.sendMidi(Midi.NOTE_ON, D400.BTN_MUTE_1+i, !_trackBank.getItemAt(i).mute().get() ? 0 : 127);
+   }
+
+   private void soloTrack(int i)
+   {
+      _trackBank.getItemAt(i).solo().toggle();
+      _midiOut.sendMidi(Midi.NOTE_ON, D400.BTN_RECORD_1+i, !_trackBank.getItemAt(i).solo().get() ? 0 : 127);
    }
 
    private int relative(int midiData)
