@@ -27,9 +27,9 @@ public class D400GridExtension extends ControllerExtension
    private final CursorRemoteControlsPage[] _parameterBanks = new CursorRemoteControlsPage[8];
    private Application _application;
 
-   private final Fader[] faders = new Fader[8];
+   private final Fader[] _faders = new Fader[8];
    private final long[] _vuMeterLastSend = new long[8];
-   private final Timer displayUpdateTimer = new Timer();
+   private final Timer _displayUpdateTimer = new Timer();
 
    private boolean _deviceMode = false;
    private int _selectedTrack = -1;
@@ -93,7 +93,8 @@ public class D400GridExtension extends ControllerExtension
          track.volume().markInterested();
          track.volume().displayedValue().markInterested();
 
-         Fader fader = setUpFader(channel);
+         Fader fader = new Fader(_host, _midiIn, _midiOut, channel, _hardwareSurface);
+         _faders[channel] = fader;
          fader.setBinding(_trackBank.getItemAt(channel).volume());
 
          _vuMeterLastSend[channel] = Instant.now().toEpochMilli();
@@ -107,7 +108,7 @@ public class D400GridExtension extends ControllerExtension
          });
       }
 
-      displayUpdateTimer.scheduleAtFixedRate(new TimerTask() {
+      _displayUpdateTimer.scheduleAtFixedRate(new TimerTask() {
          @Override
          public void run() {
             buildDisplay();
@@ -125,28 +126,6 @@ public class D400GridExtension extends ControllerExtension
          buf.append(String.format("%02x", (int) ch));
       }
       return buf.toString();
-   }
-
-   private Fader setUpFader(int channel)
-   {
-      HardwareSlider slider = _hardwareSurface.createHardwareSlider ("SLIDER_" + channel);
-      slider.setAdjustValueMatcher(_midiIn.createAbsolutePitchBendValueMatcher(channel));
-
-      slider.beginTouchAction().setActionMatcher(
-              _midiIn.createActionMatcher("status == 0x90 && data1 == " + (0x68 + channel) + " && data2 > 0"));
-      slider.endTouchAction().setActionMatcher(
-              _midiIn.createActionMatcher("status == 0x90 && data1 == " + (0x68 + channel) + " && data2 == 0"));
-      slider.disableTakeOver();
-
-      slider.isBeingTouched().markInterested();
-      slider.targetValue().markInterested();
-      slider.isUpdatingTargetValue().markInterested();
-      slider.hasTargetValue().markInterested();
-
-      final Fader fader = new Fader(_host, _midiOut, channel, slider);
-      slider.targetValue().addValueObserver(fader);
-      faders[channel] = fader;
-      return fader;
    }
 
    public void createButtonWithLight(final String name, final int midi, HardwareBindable binding,
@@ -294,7 +273,7 @@ public class D400GridExtension extends ControllerExtension
             _selectedTrack = i;
          }
          _midiOut.sendMidi(Midi.NOTE_ON, D400.BTN_SELECT_1+t, t == i ? 127 : 0);
-         faders[t].setBinding(track.volume());
+         _faders[t].setBinding(track.volume());
       }
 
       if(toggleDeviceMode)
@@ -341,7 +320,7 @@ public class D400GridExtension extends ControllerExtension
       for (int t = 0; t < NUM_PARAMS_IN_PAGE; t++)
       {
          Parameter parameter = _parameterBanks[i].getParameter(t);
-         faders[t].setBinding(parameter);
+         _faders[t].setBinding(parameter);
       }
       _selectedDevice = i;
       _deviceMode = true;

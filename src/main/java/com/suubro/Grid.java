@@ -151,10 +151,6 @@ public class Grid
 
             for (Map.Entry<Key,Integer> note:notesAtPitch)
             {
-                _host.println("Note x: " + note.getKey().x
-                                 + " y: " + note.getKey().y
-                                 + " val: " + note.getValue());
-
                 int x = note.getKey().x - _earliestDisplayedNote;
                 if(x < 0 || x >= WIDTH)
                 {
@@ -203,11 +199,6 @@ public class Grid
         int y = msg.getInt(1);
         boolean downPress = msg.getInt(2) > 0;
 
-         _host.println(msg.getAddressPattern()
-                  + " x: " + x
-                  + " y: " + y
-                  + " downPress: " + downPress);
-
         int position = x + _earliestDisplayedNote;
         int pitch = yToPitch(yToGridIndex(y));
         int lastDownPress = _lastDownpressByRow[y];
@@ -222,9 +213,6 @@ public class Grid
         }
         if(x == WIDTH-1)
         {
-            _host.println((downPress ? "NOTE ON: " : "NOTE OFF: ")
-                    + " pitch: " + pitch
-                    + " velocity: " + 64);
             _noteInput.sendRawMidiEvent(downPress ? Midi.NOTE_ON : Midi.NOTE_OFF, pitch, 64);
             return;
         }
