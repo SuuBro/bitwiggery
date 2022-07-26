@@ -206,14 +206,14 @@ public class D400GridExtension extends ControllerExtension
                case D400.BTN_RECORD_6: soloTrack(5); break;
                case D400.BTN_RECORD_7: soloTrack(6); break;
                case D400.BTN_RECORD_8: soloTrack(7); break;
-               case D400.BUTTON_1: selectFx(0); break;
-               case D400.BUTTON_2: selectFx(1); break;
-               case D400.BUTTON_3: selectFx(2); break;
-               case D400.BUTTON_4: selectFx(3); break;
-               case D400.BUTTON_5: selectFx(4); break;
-               case D400.BUTTON_6: selectFx(5); break;
-               case D400.BUTTON_7: selectFx(6); break;
-               case D400.BUTTON_8: selectFx(7); break;
+               case D400.BUTTON_1: selectFx(0, true); break;
+               case D400.BUTTON_2: selectFx(1, true); break;
+               case D400.BUTTON_3: selectFx(2, true); break;
+               case D400.BUTTON_4: selectFx(3, true); break;
+               case D400.BUTTON_5: selectFx(4, true); break;
+               case D400.BUTTON_6: selectFx(5, true); break;
+               case D400.BUTTON_7: selectFx(6, true); break;
+               case D400.BUTTON_8: selectFx(7, true); break;
                case D400.BTN_ASSIGN1: changeView(1); break;
                case D400.BTN_ASSIGN2: changeView(2); break;
                case D400.JOG_WHEEL: _grid.HorizontalScroll(relative(data2)); break;
@@ -338,7 +338,7 @@ public class D400GridExtension extends ControllerExtension
       }
       else
       {
-         selectFx(0);
+         selectFx(0, false);
       }
 
       buildDisplay();
@@ -364,13 +364,16 @@ public class D400GridExtension extends ControllerExtension
       _selectedDevice = -1;
    }
 
-   private void selectFx(int i)
+   private void selectFx(int i, boolean toggleFxWindow)
    {
       clearFx(i);
       _deviceBank.scrollIntoView(i);
       Device device = _deviceBank.getDevice(i);
       device.selectInEditor();
-      device.isWindowOpen().toggle();
+      if(toggleFxWindow)
+      {
+         device.isWindowOpen().toggle();
+      }
       device.isRemoteControlsSectionVisible().set(true);
 
       for (int t = 0; t < NUM_PARAMS_IN_PAGE; t++)
