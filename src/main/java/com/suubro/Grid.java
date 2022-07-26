@@ -46,7 +46,9 @@ public class Grid
     public static final int WIDTH = 16;
     public static final int VIRTUAL_HEIGHT = 128;
     public static final int VIRTUAL_WIDTH = WIDTH * 256;
-    private static final String[] SCALES = new String[]{ "Chromatic", "Major", "Minor" };
+    public static final String[] SCALES = new String[]{ "Chromatic", "Major", "Minor" };
+
+    private static final String GRID_SETTINGS = "Grid Settings";
     private static final double RETRIGGER_GAP = 0.001;
 
     private final ControllerHost _host;
@@ -54,6 +56,9 @@ public class Grid
     private final NoteInput _noteInput;
     private final Transport _transport;
     private final OscConnection _oscOut;
+
+    SettableEnumValue _scaleSetting;
+    SettableEnumValue _scaleRootSetting;
 
     private final int[] _lastDownpressByRow = {-1, -1, -1, -1, -1, -1, -1, -1};
     private int _currentStep = -1;
@@ -69,7 +74,8 @@ public class Grid
 
     int[][] _ledDisplay = new int[WIDTH][HEIGHT];
 
-    public Grid(ControllerHost host, PinnableCursorClip clip, NoteInput noteInput, Transport transport) {
+    public Grid(ControllerHost host, PinnableCursorClip clip, NoteInput noteInput, Transport transport)
+    {
         _host = host;
         _clip = clip;
         _noteInput = noteInput;
@@ -101,6 +107,27 @@ public class Grid
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+
+        DocumentState documentState = _host.getDocumentState();
+
+
+        _scaleSetting = documentState.getEnumSetting("Scale", GRID_SETTINGS,
+                Grid.SCALES, "Chromatic");
+        _scaleSetting.addValueObserver(this::ChangeScaleSetting);
+
+        _scaleRootSetting = documentState.getEnumSetting("Scale Root", GRID_SETTINGS,
+                Scales.NoteNameToIndex.keySet().stream().sorted().toArray(String[]::new), "C");
+        _scaleRootSetting.addValueObserver(this::ChangeScaleRootSetting);
+    }
+
+    private void ChangeScaleSetting(String scaleName)
+    {
+        SetScaleIndex(Arrays.asList(SCALES).indexOf(scaleName));
+    }
+
+    private void ChangeScaleRootSetting(String scaleRoot)
+    {
+        SetScaleRoot(Scales.NoteNameToIndex.get(scaleRoot));
     }
 
     public void UpdatePlayingStep(int step)
@@ -304,17 +331,23 @@ public class Grid
     public void VerticalScroll(int amount)
     {
         _lowestDisplayedPitchIndex += amount;
-        _lowestDisplayedPitchIndex = Math.min(Math.max(_lowestDisplayedPitchIndex, 0), _availablePitches.length);
+        _lowestDisplayedPitchIndex = Math.min(Math.max(_lowestDisplayedPitchIndex, 0), _availablePitches.length - HEIGHT);
         _host.showPopupNotification("Lowest Note: " + Scales.PitchToNoteName(_availablePitches[_lowestDisplayedPitchIndex]));
         Render();
     }
 
     public void ChangeScale(int amount)
     {
-        _scaleIndex += amount > 0 ? 1 : -1;
-        _scaleIndex = Math.max(Math.min(_scaleIndex, SCALES.length - 1), 0);
+        int newIndex = _scaleIndex + (amount > 0 ? 1 : -1);
+        SetScaleIndex(Math.max(Math.min(newIndex, SCALES.length - 1), 0));
+    }
+
+    private void SetScaleIndex(int index)
+    {
+        _scaleIndex = index;
         _host.showPopupNotification("Scale: " + Scales.IntervalToNoteName(_scaleRoot)
                 + " " + SCALES[_scaleIndex]);
+        _scaleSetting.set(SCALES[_scaleIndex]);
         UpdateAvailablePitches();
         Render();
     }
@@ -337,11 +370,17 @@ public class Grid
 
     public void ChangeScaleRoot()
     {
-        if(_heldNotePitch > 0){
-            _scaleRoot = _heldNotePitch % 12;
-            _host.showPopupNotification("Scale: " + Scales.IntervalToNoteName(_scaleRoot)
-                    + " " + SCALES[_scaleIndex]);
+        if (_heldNotePitch < 0) {
+            return;
         }
+        SetScaleRoot(_heldNotePitch % 12);
+    }
+
+    private void SetScaleRoot(int noteIndex) {
+        _scaleRoot = noteIndex;
+        _host.showPopupNotification("Scale: " + Scales.IntervalToNoteName(_scaleRoot)
+                    + " " + SCALES[_scaleIndex]);
+        _scaleRootSetting.set(Scales.NoteIndexToName.get(_scaleRoot));
         UpdateAvailablePitches();
         Render();
     }

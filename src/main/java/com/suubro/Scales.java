@@ -24,7 +24,7 @@ public class Scales
 
     public static String IntervalToNoteName(int interval)
     {
-        return NoteNames.get(interval % 12);
+        return NoteIndexToName.get(interval % 12);
     }
 
     public static String PitchToNoteName(int pitch)
@@ -46,7 +46,7 @@ public class Scales
         ScaleIntervals = Collections.unmodifiableMap(builder);
     }
 
-    private static final Map<Integer, String> NoteNames;
+    public static final Map<Integer, String> NoteIndexToName;
     static {
         Map<Integer, String> builder = new HashMap<>();
         builder.put(0, "C");
@@ -61,6 +61,13 @@ public class Scales
         builder.put(9, "A");
         builder.put(10, "A#");
         builder.put(11, "B");
-        NoteNames = Collections.unmodifiableMap(builder);
+        NoteIndexToName = Collections.unmodifiableMap(builder);
+    }
+
+    public static final Map<String, Integer> NoteNameToIndex;
+    static {
+        Map<String, Integer> builder = new HashMap<>();
+        NoteIndexToName.forEach((key, value) -> builder.put(value, key));
+        NoteNameToIndex = Collections.unmodifiableMap(builder);
     }
 }
