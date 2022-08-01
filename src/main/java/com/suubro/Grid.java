@@ -55,6 +55,7 @@ public class Grid
     private final PinnableCursorClip _clip;
     private final NoteInput _noteInput;
     private final Transport _transport;
+    private final TrackBank _trackBank;
     private final OscConnection _oscOut;
 
     SettableEnumValue _scaleSetting;
@@ -65,6 +66,7 @@ public class Grid
     private double _zoomLevel = 0.25;
     private int _earliestDisplayedNote = 0;
     private int _lowestDisplayedPitchIndex = 60;
+    private final Map<Integer,Integer> _lowestDisplayedPitchIndexMemory = new HashMap<>();
     private int _scaleIndex = 0;
     private int _scaleRoot = 0;
     private int[] _availablePitches = IntStream.range(0, 127).toArray();
@@ -74,14 +76,21 @@ public class Grid
 
     int[][] _ledDisplay = new int[WIDTH][HEIGHT];
 
-    public Grid(ControllerHost host, PinnableCursorClip clip, NoteInput noteInput, Transport transport)
+    public Grid(ControllerHost host,
+                PinnableCursorClip clip,
+                NoteInput noteInput,
+                Transport transport,
+                TrackBank trackBank)
     {
         _host = host;
         _clip = clip;
         _noteInput = noteInput;
         _transport = transport;
+        _trackBank = trackBank;
 
         _transport.isClipLauncherOverdubEnabled().markInterested();
+        _trackBank.scrollPosition().markInterested();
+        _trackBank.cursorIndex().addValueObserver(this::OnTrackChange);
 
         _clip.setStepSize(_zoomLevel);
         _clip.getLoopStart().addValueObserver(d -> Render());
@@ -110,7 +119,6 @@ public class Grid
 
         DocumentState documentState = _host.getDocumentState();
 
-
         _scaleSetting = documentState.getEnumSetting("Scale", GRID_SETTINGS,
                 Grid.SCALES, "Chromatic");
         _scaleSetting.addValueObserver(this::ChangeScaleSetting);
@@ -118,6 +126,23 @@ public class Grid
         _scaleRootSetting = documentState.getEnumSetting("Scale Root", GRID_SETTINGS,
                 Scales.NoteNameToIndex.keySet().stream().sorted().toArray(String[]::new), "C");
         _scaleRootSetting.addValueObserver(this::ChangeScaleRootSetting);
+    }
+
+    private int previousTrack = -1;
+    private void OnTrackChange(int trackBankCursorIndex)
+    {
+        int scrollPosition = _trackBank.scrollPosition().get();
+        int newTrackIndex = (scrollPosition + trackBankCursorIndex);
+        _host.println("TrackChange " + previousTrack + " -> " + newTrackIndex);
+
+        if(previousTrack >= 0)
+        {
+            _lowestDisplayedPitchIndexMemory.put(previousTrack, _lowestDisplayedPitchIndex);
+            _lowestDisplayedPitchIndex = _lowestDisplayedPitchIndexMemory
+                    .getOrDefault(newTrackIndex, _lowestDisplayedPitchIndex);
+        }
+
+        previousTrack = newTrackIndex;
     }
 
     private void ChangeScaleSetting(String scaleName)

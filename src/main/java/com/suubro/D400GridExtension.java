@@ -56,8 +56,10 @@ public class D400GridExtension extends ControllerExtension
 
       _clip.clipLauncherSlot().sceneIndex().markInterested();
       _transport = _host.createTransport();
+      _trackBank = _host.createMainTrackBank(8, 0, 0);
+      _trackBank.followCursorTrack(_cursorTrack);
 
-      _grid = new Grid(_host, _clip, noteInput, _transport);
+      _grid = new Grid(_host, _clip, noteInput, _transport, _trackBank);
 
       _hardwareSurface = _host.createHardwareSurface();
 
@@ -69,8 +71,7 @@ public class D400GridExtension extends ControllerExtension
       createButtonWithLight("LOOP", D400.BTN_LOOP, _transport.isArrangerLoopEnabled());
       createButtonWithLight("METRONOME", D400.BTN_METRONOME, _transport.isMetronomeEnabled());
 
-      _trackBank = _host.createMainTrackBank(8, 0, 0);
-      _trackBank.followCursorTrack(_cursorTrack);
+
       _deviceBank = _cursorTrack.createDeviceBank(8);
 
       for (int i = 0; i < _deviceBank.getSizeOfBank(); i++) {
@@ -166,7 +167,7 @@ public class D400GridExtension extends ControllerExtension
    public void handleMidi (final int statusByte, final int data1, final int data2)
    {
       final ShortMidiMessage msg = new ShortMidiMessage (statusByte, data1, data2);
-      _host.println(msg.toString());
+      // _host.println(msg.toString());
 
       if(statusByte == Midi.NOTE_ON)
       {
