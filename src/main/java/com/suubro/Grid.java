@@ -158,6 +158,14 @@ public class Grid
     private long lastRender = 0;
     public void Render()
     {
+        final int NOTE_DISPLAY_WIDTH = WIDTH - 1;
+        final int OUTSIDE_LOOP_REGION = 2;
+        final int ROOT_NOTE = 7;
+        final int NOT_ROOT_NOTE = 3;
+        final int ACTIVE_POSITION_BOOST = 2;
+        final int NOTE_START = 13;
+        final int NOTE_CONTINUE = 9;
+
         boolean isRecording = _transport.isClipLauncherOverdubEnabled().get();
         long now = Instant.now().toEpochMilli();
         if(isRecording && lastRender > now - 60)
@@ -179,32 +187,30 @@ public class Grid
             for (Map.Entry<Key,Integer> note:notesAtPitch)
             {
                 int x = note.getKey().x - _earliestDisplayedNote;
-                if(x < 0 || x >= WIDTH)
+                if(x < 0 || x >= NOTE_DISPLAY_WIDTH)
                 {
                     continue; // Nothing to display
                 }
-                _ledDisplay[x][yToGridIndex(y)] = (note.getValue() == 1) ? 6 : 12;
+                _ledDisplay[x][yToGridIndex(y)] = (note.getValue() == 1) ? NOTE_CONTINUE : NOTE_START;
             }
 
             double loopStart = _clip.getLoopStart().get() / _zoomLevel;
             double loopEnd = (_clip.getLoopStart().get() + _clip.getLoopLength().get()) / _zoomLevel;
 
-            for (int x = 0; x < WIDTH; x++)
+            for (int x = 0; x < NOTE_DISPLAY_WIDTH; x++)
             {
                 int oldValue = _ledDisplay[x][yToGridIndex(y)];
                 if (_currentStep == _earliestDisplayedNote + x)
                 {
-                    _ledDisplay[x][yToGridIndex(y)] = oldValue + 3;
+                    _ledDisplay[x][yToGridIndex(y)] = oldValue + ACTIVE_POSITION_BOOST;
                 }
-                else if (_earliestDisplayedNote + x < loopStart)
+                else if (_earliestDisplayedNote + x < loopStart || _earliestDisplayedNote + x >= loopEnd)
                 {
-                    _ledDisplay[x][yToGridIndex(y)] = oldValue == 0 ? 2 : oldValue;
-                }
-                else if (_earliestDisplayedNote + x >= loopEnd)
-                {
-                    _ledDisplay[x][yToGridIndex(y)] = oldValue == 0 ? 2 : oldValue;
+                    _ledDisplay[x][yToGridIndex(y)] = oldValue == 0 ? OUTSIDE_LOOP_REGION : oldValue;
                 }
             }
+
+            _ledDisplay[NOTE_DISPLAY_WIDTH][yToGridIndex(y)] = pitch % 12 == _scaleRoot ? ROOT_NOTE : NOT_ROOT_NOTE;
         }
         MonomeGridOscUtil.LedLevelMapByOsc(_ledDisplay, _oscOut);
     }
